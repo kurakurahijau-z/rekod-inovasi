@@ -1,63 +1,38 @@
-<!doctype html>
-<html lang="ms">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Rekod Inovasi Jabatan - Login</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="./config.js"></script>
-  <script src="./app.js"></script>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <meta charset="UTF-8" />
+  <title>Rekod Inovasi Jabatan</title>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
 </head>
-<body class="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-  <div class="w-full max-w-xl bg-white border rounded-2xl p-8">
-    <h1 class="text-3xl font-extrabold">Rekod Inovasi Jabatan</h1>
-    <p class="text-slate-600 mt-2">Log masuk guna akaun rasmi <b>@pms.edu.my</b></p>
+<body style="font-family:Arial; padding:40px">
 
-    <div class="mt-6" id="gBtn"></div>
+<h2>Rekod Inovasi Jabatan</h2>
+<p>Login guna akaun rasmi @pms.edu.my</p>
 
-    <div id="statusText" class="text-sm mt-3 text-slate-500">Status: menunggu sign-in…</div>
-
-    <div class="mt-6 text-xs text-slate-500">© 2026 kurakurahijau.com</div>
-  </div>
+<button onclick="login()">Login Google</button>
 
 <script>
-  // If already have session, go dashboard
-  if (getToken() && getEmail()){
-    location.href = "./dashboard.html";
+async function login() {
+  const email = prompt("Masukkan email @pms.edu.my");
+
+  if (!email || !email.endsWith(window.APP_CONFIG.ALLOWED_DOMAIN)) {
+    alert("Domain tak sah.");
+    return;
   }
 
-  function onGoogleCredential(resp){
-    const idToken = resp.credential;
-    setStatus("Verifying token…");
+  const r = await apiGet({ action: "login", email });
 
-    apiGet({ action:"loginGoogle", idToken })
-      .then(r => {
-        if (!r || !r.ok) throw new Error((r && r.error) ? r.error : "Login failed");
-
-        const email = r.data.email;
-        if (!email.endsWith("@"+window.APP_CONFIG.ALLOWED_DOMAIN)){
-          throw new Error("Domain tak dibenarkan");
-        }
-
-        setSession(email, r.data.appToken);
-        setStatus("Login berjaya ✅", "ok");
-        setTimeout(()=> location.href="./dashboard.html", 500);
-      })
-      .catch(err => setStatus("Error: " + err.message, "err"));
+  if (!r.ok) {
+    alert("Login gagal");
+    return;
   }
 
-  window.onload = function(){
-    google.accounts.id.initialize({
-      client_id: window.APP_CONFIG.CLIENT_ID,
-      callback: onGoogleCredential
-    });
-
-    google.accounts.id.renderButton(
-      document.getElementById("gBtn"),
-      { theme:"outline", size:"large" }
-    );
-  }
+  setSession(email, r.token);
+  location.href = "./dashboard.html";
+}
 </script>
+
 </body>
 </html>
