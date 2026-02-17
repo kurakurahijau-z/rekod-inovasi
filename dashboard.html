@@ -1,42 +1,199 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="ms">
 <head>
-<meta charset="UTF-8" />
-<title>Dashboard</title>
-<script src="config.js"></script>
-<script src="app.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard - Rekod Inovasi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
 </head>
-<body style="font-family:Arial; padding:40px">
 
-<h2>Dashboard</h2>
-<p id="loginEmail"></p>
+<body class="bg-slate-50 text-slate-900">
+  <div class="max-w-6xl mx-auto px-4 py-10">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h1 class="text-3xl font-extrabold">Dashboard</h1>
+        <p class="mt-1 text-sm text-slate-600">
+          Login: <b id="loginEmail">-</b>
+          <span class="ml-2 px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-700" id="rolePill">user</span>
+        </p>
+        <div id="statusText" class="text-sm mt-3 text-slate-500"></div>
+      </div>
 
-<button onclick="loadData()">List My Innovations</button>
-<button onclick="logout()">Logout</button>
+      <button id="btnLogout" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-100 transition">
+        Logout
+      </button>
+    </div>
 
-<pre id="output"></pre>
+    <div class="mt-6 flex flex-wrap gap-2">
+      <button id="btnList" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-100 transition">
+        List My Innovations
+      </button>
+      <button id="btnReport" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-100 transition">
+        Generate Report 2026
+      </button>
+      <a href="./add-innovation.html" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-100 transition">
+        + Tambah Inovasi
+      </a>
+    </div>
+
+    <div id="cards" class="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+    <div class="mt-6 bg-white border rounded-2xl overflow-hidden">
+      <div class="px-6 py-4 border-b flex items-center justify-between">
+        <div class="font-bold text-lg">Senarai Inovasi Saya</div>
+        <div class="text-sm text-slate-500" id="countText">0 rekod</div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-slate-50 text-slate-600">
+            <tr>
+              <th class="text-left px-6 py-3">Tajuk</th>
+              <th class="text-left px-6 py-3">Tahun</th>
+              <th class="text-left px-6 py-3">Kategori</th>
+              <th class="text-left px-6 py-3">Status</th>
+              <th class="text-left px-6 py-3">MyIPO</th>
+              <th class="text-left px-6 py-3">ID</th>
+            </tr>
+          </thead>
+          <tbody id="tbody" class="divide-y"></tbody>
+        </table>
+      </div>
+
+      <details class="px-6 py-4 border-t bg-white">
+        <summary class="cursor-pointer text-sm text-slate-600">Debug output (JSON)</summary>
+        <pre id="debug" class="text-xs mt-3 bg-slate-50 border rounded-xl p-4 overflow-auto">{}</pre>
+      </details>
+    </div>
+
+    <div class="mt-6 text-xs text-slate-500">© 2026 kurakurahijau.com</div>
+  </div>
 
 <script>
-requireLogin();
+  requireSessionOrRedirect();
 
-document.getElementById("loginEmail").textContent =
-  "Login: " + getEmail();
+  document.getElementById("loginEmail").textContent = getEmail();
+  document.getElementById("rolePill").textContent = getRole();
 
-async function loadData() {
-  const r = await apiGet({
-    action: "listMyInnovations",
-    appToken: getToken()
+  document.getElementById("btnLogout").addEventListener("click", () => {
+    clearSession();
+    location.href = "./index.html";
   });
 
-  document.getElementById("output").textContent =
-    JSON.stringify(r, null, 2);
-}
+  document.getElementById("btnList").addEventListener("click", loadList);
+  document.getElementById("btnReport").addEventListener("click", report2026);
 
-function logout() {
-  clearSession();
-  location.href = "./index.html";
-}
+  function esc(s){
+    return String(s??"").replace(/[&<>"']/g, m => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+    }[m]));
+  }
+
+  function pillStatus(s){
+    const v = String(s||"").toLowerCase().trim();
+    if (v==="aktif") return `<span class="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-800">aktif</span>`;
+    if (v==="draft") return `<span class="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-800">draft</span>`;
+    if (!v) return `<span class="px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-700">-</span>`;
+    return `<span class="px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-700">${esc(s)}</span>`;
+  }
+
+  function renderCards(list){
+    const total = list.length;
+    const years = new Set(list.map(x => String(x.tahun||"").trim()).filter(Boolean));
+    const aktif = list.filter(x => String(x.status||"").toLowerCase()==="aktif").length;
+    const myipoYes = list.filter(x => String(x.myipoStatus||"").toLowerCase()==="yes").length;
+
+    document.getElementById("cards").innerHTML = `
+      <div class="bg-white border rounded-2xl p-5">
+        <div class="text-xs text-slate-500">Jumlah Inovasi</div>
+        <div class="text-3xl font-extrabold mt-1">${total}</div>
+      </div>
+      <div class="bg-white border rounded-2xl p-5">
+        <div class="text-xs text-slate-500">Bil. Tahun Terlibat</div>
+        <div class="text-3xl font-extrabold mt-1">${years.size || 0}</div>
+      </div>
+      <div class="bg-white border rounded-2xl p-5">
+        <div class="text-xs text-slate-500">Status Aktif</div>
+        <div class="text-3xl font-extrabold mt-1">${aktif}</div>
+      </div>
+      <div class="bg-white border rounded-2xl p-5">
+        <div class="text-xs text-slate-500">MyIPO (Yes)</div>
+        <div class="text-3xl font-extrabold mt-1">${myipoYes}</div>
+      </div>
+    `;
+  }
+
+  function renderTable(list){
+    document.getElementById("countText").textContent = `${list.length} rekod`;
+
+    document.getElementById("tbody").innerHTML = list.map(x => {
+      const id = x.innovationId || x.innovationid || "";
+      const myipo = `${x.myipoStatus || "-"}${x.myipoNumber ? " / "+x.myipoNumber : ""}`;
+      return `
+        <tr class="hover:bg-slate-50">
+          <td class="px-6 py-3 font-medium">${esc(x.tajuk || "")}</td>
+          <td class="px-6 py-3">${esc(x.tahun || "")}</td>
+          <td class="px-6 py-3">${esc(x.kategori || "")}</td>
+          <td class="px-6 py-3">${pillStatus(x.status)}</td>
+          <td class="px-6 py-3">${esc(myipo)}</td>
+          <td class="px-6 py-3">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-1 text-xs bg-slate-100 rounded-lg">${esc(String(id).slice(0,10))}${id?"…":""}</span>
+              ${id ? `<button class="text-xs underline text-slate-600" data-copy="${esc(id)}">Copy</button>` : ""}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
+
+    document.querySelectorAll("button[data-copy]").forEach(btn=>{
+      btn.addEventListener("click", async ()=>{
+        try{
+          await navigator.clipboard.writeText(btn.getAttribute("data-copy"));
+          setStatus("Innovation ID dah copy ✅", "ok");
+          setTimeout(()=>setStatus(""), 1200);
+        }catch(e){
+          setStatus("Tak boleh copy (browser block).", "err");
+        }
+      });
+    });
+  }
+
+  async function loadList(){
+    setStatus("Loading innovations…");
+    const r = await apiGet({ action:"listMyInnovations", appToken:getToken() });
+    document.getElementById("debug").textContent = JSON.stringify(r, null, 2);
+
+    if (!r || !r.ok){
+      setStatus("Error: " + (r?.error || "unknown"), "err");
+      return;
+    }
+
+    const list = r.data || [];
+    renderCards(list);
+    renderTable(list);
+
+    setStatus("Siap ✅", "ok");
+    setTimeout(()=>setStatus(""), 1000);
+  }
+
+  async function report2026(){
+    setStatus("Generate report 2026…");
+    const r = await apiGet({ action:"generateReport", tahun:"2026", appToken:getToken() });
+    document.getElementById("debug").textContent = JSON.stringify(r, null, 2);
+
+    if (!r || !r.ok){
+      setStatus("Error: " + (r?.error || "unknown"), "err");
+      return;
+    }
+
+    setStatus(`Report 2026 siap ✅ (Total ${r.data.total}, Aktif ${r.data.aktif}, MyIPO Yes ${r.data.myipoYes})`, "ok");
+  }
+
+  // auto load
+  loadList();
 </script>
-
 </body>
 </html>
