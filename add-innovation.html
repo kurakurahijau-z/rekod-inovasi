@@ -1,122 +1,98 @@
 <!doctype html>
 <html lang="ms">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tambah Inovasi</title>
-  <script src="app.js"></script>
-  <style>
-    body{ font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin:0; padding:48px; }
-    .wrap{ max-width:700px; margin:0 auto; }
-    .card{ padding:18px; border:1px solid #e5e7eb; border-radius:14px; }
-    label{ display:block; margin-top:12px; font-size:14px; color:#374151; }
-    input,select{ width:100%; padding:10px; border:1px solid #d1d5db; border-radius:10px; margin-top:6px; }
-    .row{ display:flex; gap:10px; }
-    .row > div{ flex:1; }
-    .muted{ color:#6b7280; }
-    .err{ color:#dc2626; white-space:pre-wrap; margin-top:10px; }
-    .ok{ color:#16a34a; white-space:pre-wrap; margin-top:10px; }
-    button,a.btn{ padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; background:#fff; cursor:pointer; text-decoration:none; color:#111827; }
-  </style>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
 </head>
-<body>
-  <div class="wrap">
-    <h1 style="margin:0 0 6px;">Tambah Inovasi</h1>
-    <div class="muted">Owner ikut login: <b id="email"></b></div>
+<body class="min-h-screen bg-slate-50">
+  <div class="max-w-2xl mx-auto p-6">
+    <h1 class="text-4xl font-extrabold">Tambah Inovasi</h1>
+    <div class="text-slate-600 mt-1">Owner ikut login: <b id="emailText"></b></div>
 
-    <div class="card" style="margin-top:16px;">
-      <label>Tajuk</label>
-      <input id="tajuk" placeholder="Contoh: Sistem Rekod Inovasi Jabatan" />
+    <div class="mt-6 bg-white border rounded-2xl p-6">
+      <label class="text-sm font-medium">Tajuk</label>
+      <input id="tajuk" class="w-full mt-2 px-4 py-2 border rounded-xl" placeholder="Contoh: Sistem Rekod Inovasi Jabatan" />
 
-      <div class="row">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
         <div>
-          <label>Tahun</label>
-          <input id="tahun" type="number" value="2026" />
+          <label class="text-sm font-medium">Tahun</label>
+          <input id="tahun" type="number" class="w-full mt-2 px-4 py-2 border rounded-xl" value="2026" />
         </div>
         <div>
-          <label>Status</label>
-          <select id="status">
+          <label class="text-sm font-medium">Status</label>
+          <select id="status" class="w-full mt-2 px-4 py-2 border rounded-xl">
             <option value="aktif">aktif</option>
             <option value="draft">draft</option>
-            <option value="inactive">inactive</option>
             <option value="archived">archived</option>
           </select>
         </div>
       </div>
 
-      <label>Kategori</label>
-      <input id="kategori" placeholder="Contoh: Produk / Sistem / Modul / PdP" />
+      <div class="mt-4">
+        <label class="text-sm font-medium">Kategori</label>
+        <input id="kategori" class="w-full mt-2 px-4 py-2 border rounded-xl" placeholder="Contoh: Produk / Sistem / Modul / PdP" />
+      </div>
 
-      <div class="row">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
         <div>
-          <label>MyIPO Status (optional)</label>
-          <select id="myipoStatus">
+          <label class="text-sm font-medium">MyIPO Status (optional)</label>
+          <select id="myipoStatus" class="w-full mt-2 px-4 py-2 border rounded-xl">
             <option value="">-</option>
             <option value="yes">yes</option>
             <option value="no">no</option>
           </select>
         </div>
         <div>
-          <label>MyIPO Number (optional)</label>
-          <input id="myipoNumber" placeholder="Contoh: LY2026-12345" />
+          <label class="text-sm font-medium">MyIPO Number (optional)</label>
+          <input id="myipoNumber" class="w-full mt-2 px-4 py-2 border rounded-xl" placeholder="Contoh: LYC2026-12345" />
         </div>
       </div>
 
-      <div class="row" style="margin-top:14px;">
-        <button onclick="save()">Simpan</button>
-        <a class="btn" href="./dashboard.html">Batal</a>
+      <div class="mt-5 flex gap-3">
+        <button id="btnSave" class="px-4 py-2 border rounded-xl bg-white hover:bg-slate-100">Simpan</button>
+        <a href="./dashboard.html" class="px-4 py-2 border rounded-xl bg-white hover:bg-slate-100">Batal</a>
       </div>
 
-      <div id="msg" class="err"></div>
+      <div id="statusText" class="text-sm mt-4 text-slate-500"></div>
     </div>
 
-    <div class="muted" style="margin-top:18px;">© 2026 kurakurahijau.com</div>
+    <div class="mt-6 text-xs text-slate-500">© 2026 kurakurahijau.com</div>
   </div>
 
 <script>
   requireSessionOrRedirect();
-  document.getElementById("email").textContent = getEmail();
+  document.getElementById("emailText").textContent = getEmail();
 
-  function show(cls, t){
-    const el = document.getElementById("msg");
-    el.className = cls;
-    el.textContent = t;
-  }
+  document.getElementById("btnSave").addEventListener("click", async () => {
+    const tajuk = document.getElementById("tajuk").value.trim();
+    const tahun = document.getElementById("tahun").value.trim();
+    const kategori = document.getElementById("kategori").value.trim();
+    const status = document.getElementById("status").value.trim();
+    const myipoStatus = document.getElementById("myipoStatus").value.trim();
+    const myipoNumber = document.getElementById("myipoNumber").value.trim();
 
-  async function save(){
-    try {
-      const tajuk = document.getElementById("tajuk").value.trim();
-      const tahun = document.getElementById("tahun").value.trim();
-      const kategori = document.getElementById("kategori").value.trim();
-      const status = document.getElementById("status").value.trim();
-      const myipoStatus = document.getElementById("myipoStatus").value.trim();
-      const myipoNumber = document.getElementById("myipoNumber").value.trim();
+    if (!tajuk) return setStatus("Tajuk wajib isi", "err");
 
-      if (!tajuk) return show("err","Tajuk wajib isi.");
+    setStatus("Saving…");
 
-      const out = await apiGet({
-        action:"createInnovation",
-        appToken: getToken(),
-        tajuk,
-        tahun,
-        kategori,
-        status,
-        myipoStatus,
-        myipoNumber
-      });
+    const r = await apiGet({
+      action:"createInnovation",
+      appToken:getToken(),
+      tajuk, tahun, kategori, status, myipoStatus, myipoNumber
+    });
 
-      if (!out.ok) {
-        show("err", out.error || "Gagal simpan");
-        if ((out.error || "").toLowerCase().includes("session")) clearSession();
-        return;
-      }
-
-      show("ok", "Berjaya simpan. ID: " + out.data.innovationId);
-      setTimeout(() => location.href="./dashboard.html", 700);
-    } catch (e) {
-      show("err", String(e));
+    if (!r || !r.ok){
+      setStatus("Error: " + (r && r.error ? r.error : "unknown"), "err");
+      return;
     }
-  }
+
+    setStatus("Berjaya simpan ✅", "ok");
+    setTimeout(()=> location.href="./dashboard.html", 600);
+  });
 </script>
 </body>
 </html>
