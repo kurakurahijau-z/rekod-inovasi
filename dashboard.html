@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard – Rekod Inovasi</title>
+</head>
+<body style="font-family: system-ui; padding: 24px; max-width: 980px; margin: 0 auto;">
+  <div style="display:flex; justify-content:space-between; gap:12px; align-items:center;">
+    <h2 style="margin:0;">Dashboard</h2>
+    <button id="btnLogout">Logout</button>
+  </div>
+
+  <p id="who" style="opacity:.8;"></p>
+
+  <div style="display:flex; gap:10px; flex-wrap:wrap; margin: 16px 0;">
+    <button id="btnList">List My Innovations</button>
+    <button id="btnReport">Generate Report 2026</button>
+  </div>
+
+  <pre id="out" style="white-space: pre-wrap; background:#f6f8fa; padding:12px; border-radius:10px;"></pre>
+
+  <script>
+    const BASE_URL = "https://script.google.com/macros/s/AKfycbw5B9rmptyZuBJ7nIf1rHZBA7in4emEJF2Ubaep0pFDerua6APFXsoU_XdJpyhuy7KO/exec";
+    const appToken = localStorage.getItem("appToken") || "";
+    const email = localStorage.getItem("userEmail") || "";
+
+    document.getElementById("who").textContent = email ? `Login: ${email}` : "Not logged in";
+
+    if (!appToken) {
+      alert("Session tak ada. Sila login semula.");
+      location.href = "index.html";
+    }
+
+    document.getElementById("btnLogout").onclick = () => {
+      localStorage.removeItem("appToken");
+      localStorage.removeItem("userEmail");
+      location.href = "index.html";
+    };
+
+    document.getElementById("btnList").onclick = async () => {
+      const url = `${BASE_URL}?action=listMyInnovations&appToken=${encodeURIComponent(appToken)}`;
+      const r = await fetch(url);
+      document.getElementById("out").textContent = JSON.stringify(await r.json(), null, 2);
+    };
+
+    document.getElementById("btnReport").onclick = async () => {
+      const url = `${BASE_URL}?action=generateReport&tahun=2026&appToken=${encodeURIComponent(appToken)}`;
+      const r = await fetch(url);
+      document.getElementById("out").textContent = JSON.stringify(await r.json(), null, 2);
+    };
+  </script>
+</body>
+</html>
