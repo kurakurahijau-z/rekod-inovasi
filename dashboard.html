@@ -7,11 +7,33 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="./config.js"></script>
   <script src="./app.js"></script>
+
+  <!-- PRINT (Landscape + footer) -->
+  <style>
+    @page { size: A4 landscape; margin: 12mm; }
+    @media print {
+      body { background: #fff !important; }
+      .no-print { display: none !important; }
+      .print-card { border: none !important; border-radius: 0 !important; }
+      .print-only { display: block !important; }
+      .print-footer {
+        position: fixed;
+        bottom: 8mm;
+        left: 12mm;
+        right: 12mm;
+        font-size: 10px;
+        color: #666;
+        display: flex;
+        justify-content: space-between;
+      }
+    }
+    .print-only { display: none; }
+  </style>
 </head>
 
 <body class="bg-slate-50 text-slate-900">
   <div class="max-w-6xl mx-auto px-4 py-10">
-    <div class="flex items-start justify-between gap-4">
+    <div class="flex items-start justify-between gap-4 no-print">
       <div>
         <h1 class="text-3xl font-extrabold">Dashboard</h1>
         <p class="mt-1 text-sm text-slate-600">
@@ -26,21 +48,32 @@
       </button>
     </div>
 
-    <div class="mt-6 flex flex-wrap gap-2">
+    <div class="mt-6 flex flex-wrap gap-2 no-print">
       <button id="btnList" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-100 transition">
         List My Innovations
       </button>
       <button id="btnReport" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-100 transition">
         Generate Report 2026
       </button>
+      <button id="btnPrintReport" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-100 transition">
+        Print / Save PDF (Report 2026)
+      </button>
       <a href="./add-innovation.html" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-100 transition">
         + Tambah Inovasi
       </a>
     </div>
 
-    <div id="cards" class="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+    <!-- PRINT TITLE -->
+    <div class="print-only mb-4">
+      <div class="text-2xl font-extrabold">Pencapaian Inovasi Jabatan 2026</div>
+      <div class="text-sm text-slate-600 mt-1">Ringkasan penyertaan & status inovasi (berdasarkan rekod dalam sistem)</div>
+    </div>
 
-    <div class="mt-6 bg-white border rounded-2xl overflow-hidden">
+    <!-- Cards -->
+    <div id="cards" class="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 no-print"></div>
+
+    <!-- MAIN TABLE -->
+    <div class="mt-6 bg-white border rounded-2xl overflow-hidden print-card">
       <div class="px-6 py-4 border-b flex items-center justify-between">
         <div class="font-bold text-lg">Senarai Inovasi Saya</div>
         <div class="text-sm text-slate-500" id="countText">0 rekod</div>
@@ -55,20 +88,60 @@
               <th class="text-left px-6 py-3">Kategori</th>
               <th class="text-left px-6 py-3">Status</th>
               <th class="text-left px-6 py-3">MyIPO</th>
-              <th class="text-left px-6 py-3">ID</th>
+              <th class="text-left px-6 py-3 no-print">ID</th>
             </tr>
           </thead>
           <tbody id="tbody" class="divide-y"></tbody>
         </table>
       </div>
 
-      <details class="px-6 py-4 border-t bg-white">
+      <details class="px-6 py-4 border-t bg-white no-print">
         <summary class="cursor-pointer text-sm text-slate-600">Debug output (JSON)</summary>
         <pre id="debug" class="text-xs mt-3 bg-slate-50 border rounded-xl p-4 overflow-auto">{}</pre>
       </details>
     </div>
 
-    <div class="mt-6 text-xs text-slate-500">© 2026 kurakurahijau.com</div>
+    <!-- REPORT SECTION (PRINT TARGET) -->
+    <div class="mt-10 bg-white border rounded-2xl overflow-hidden print-card" id="reportBox">
+      <div class="px-6 py-4 border-b flex items-center justify-between">
+        <div class="font-bold text-lg">Report Inovasi 2026</div>
+        <div class="flex gap-2 no-print">
+          <button id="btnRefreshReport" class="px-3 py-1.5 text-sm border rounded-lg hover:bg-slate-100">
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div class="p-6">
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4" id="reportCards"></div>
+
+        <div class="mt-6 overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="bg-slate-50 text-slate-600">
+              <tr>
+                <th class="text-left px-4 py-2">Tajuk</th>
+                <th class="text-left px-4 py-2">Kategori</th>
+                <th class="text-left px-4 py-2">Status</th>
+                <th class="text-left px-4 py-2">MyIPO</th>
+              </tr>
+            </thead>
+            <tbody id="reportTbody" class="divide-y"></tbody>
+          </table>
+        </div>
+
+        <div class="mt-4 text-xs text-slate-500">
+          Nota: Report ini memaparkan inovasi tahun 2026 berdasarkan rekod yang didaftarkan oleh ahli kumpulan / ketua kumpulan.
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-6 text-xs text-slate-500 no-print">© 2026 kurakurahijau.com</div>
+  </div>
+
+  <!-- print footer -->
+  <div class="print-footer print-only">
+    <div>© 2026 kurakurahijau.com</div>
+    <div id="printStamp"></div>
   </div>
 
 <script>
@@ -76,6 +149,7 @@
 
   document.getElementById("loginEmail").textContent = getEmail();
   document.getElementById("rolePill").textContent = getRole();
+  document.getElementById("printStamp").textContent = "Dicetak pada: " + new Date().toLocaleString("ms-MY");
 
   document.getElementById("btnLogout").addEventListener("click", () => {
     clearSession();
@@ -83,7 +157,14 @@
   });
 
   document.getElementById("btnList").addEventListener("click", loadList);
-  document.getElementById("btnReport").addEventListener("click", report2026);
+  document.getElementById("btnReport").addEventListener("click", refreshReport2026);
+  document.getElementById("btnRefreshReport").addEventListener("click", refreshReport2026);
+
+  document.getElementById("btnPrintReport").addEventListener("click", async () => {
+    // pastikan report latest sebelum print
+    await refreshReport2026();
+    setTimeout(()=> window.print(), 150);
+  });
 
   function esc(s){
     return String(s??"").replace(/[&<>"']/g, m => ({
@@ -95,6 +176,7 @@
     const v = String(s||"").toLowerCase().trim();
     if (v==="aktif") return `<span class="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-800">aktif</span>`;
     if (v==="draft") return `<span class="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-800">draft</span>`;
+    if (v==="archived" || v==="inactive") return `<span class="px-2 py-0.5 rounded-full text-xs bg-rose-100 text-rose-800">${esc(s)}</span>`;
     if (!v) return `<span class="px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-700">-</span>`;
     return `<span class="px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-700">${esc(s)}</span>`;
   }
@@ -138,7 +220,7 @@
           <td class="px-6 py-3">${esc(x.kategori || "")}</td>
           <td class="px-6 py-3">${pillStatus(x.status)}</td>
           <td class="px-6 py-3">${esc(myipo)}</td>
-          <td class="px-6 py-3">
+          <td class="px-6 py-3 no-print">
             <div class="flex items-center gap-2">
               <span class="px-2 py-1 text-xs bg-slate-100 rounded-lg">${esc(String(id).slice(0,10))}${id?"…":""}</span>
               ${id ? `<button class="text-xs underline text-slate-600" data-copy="${esc(id)}">Copy</button>` : ""}
@@ -164,7 +246,8 @@
   async function loadList(){
     setStatus("Loading innovations…");
     const r = await apiGet({ action:"listMyInnovations", appToken:getToken() });
-    document.getElementById("debug").textContent = JSON.stringify(r, null, 2);
+    const dbg = document.getElementById("debug");
+    if (dbg) dbg.textContent = JSON.stringify(r, null, 2);
 
     if (!r || !r.ok){
       setStatus("Error: " + (r?.error || "unknown"), "err");
@@ -176,24 +259,68 @@
     renderTable(list);
 
     setStatus("Siap ✅", "ok");
-    setTimeout(()=>setStatus(""), 1000);
+    setTimeout(()=>setStatus(""), 900);
   }
 
-  async function report2026(){
+  async function refreshReport2026(){
     setStatus("Generate report 2026…");
-    const r = await apiGet({ action:"generateReport", tahun:"2026", appToken:getToken() });
-    document.getElementById("debug").textContent = JSON.stringify(r, null, 2);
+
+    // guna listMyInnovations supaya report & table konsisten
+    const r = await apiGet({ action:"listMyInnovations", appToken:getToken() });
+    const dbg = document.getElementById("debug");
+    if (dbg) dbg.textContent = JSON.stringify(r, null, 2);
 
     if (!r || !r.ok){
       setStatus("Error: " + (r?.error || "unknown"), "err");
-      return;
+      return false;
     }
 
-    setStatus(`Report 2026 siap ✅ (Total ${r.data.total}, Aktif ${r.data.aktif}, MyIPO Yes ${r.data.myipoYes})`, "ok");
+    const list = (r.data || []).filter(x => Number(x.tahun) === 2026);
+
+    const total = list.length;
+    const aktif = list.filter(x => String(x.status||"").toLowerCase()==="aktif").length;
+    const myipoYes = list.filter(x => String(x.myipoStatus||"").toLowerCase()==="yes").length;
+    const myipoNo = list.filter(x => String(x.myipoStatus||"").toLowerCase()==="no").length;
+
+    document.getElementById("reportCards").innerHTML = `
+      <div class="border rounded-2xl p-4">
+        <div class="text-xs text-slate-500">Jumlah Inovasi (2026)</div>
+        <div class="text-2xl font-extrabold mt-1">${total}</div>
+      </div>
+      <div class="border rounded-2xl p-4">
+        <div class="text-xs text-slate-500">Status Aktif</div>
+        <div class="text-2xl font-extrabold mt-1">${aktif}</div>
+      </div>
+      <div class="border rounded-2xl p-4">
+        <div class="text-xs text-slate-500">MyIPO Yes</div>
+        <div class="text-2xl font-extrabold mt-1">${myipoYes}</div>
+      </div>
+      <div class="border rounded-2xl p-4">
+        <div class="text-xs text-slate-500">MyIPO No</div>
+        <div class="text-2xl font-extrabold mt-1">${myipoNo}</div>
+      </div>
+    `;
+
+    document.getElementById("reportTbody").innerHTML = list.map(x => {
+      const myipo = `${x.myipoStatus || "-"}${x.myipoNumber ? " / "+x.myipoNumber : ""}`;
+      return `
+        <tr>
+          <td class="px-4 py-2 font-medium">${esc(x.tajuk || "")}</td>
+          <td class="px-4 py-2">${esc(x.kategori || "")}</td>
+          <td class="px-4 py-2">${pillStatus(x.status)}</td>
+          <td class="px-4 py-2">${esc(myipo)}</td>
+        </tr>
+      `;
+    }).join("");
+
+    setStatus("Report 2026 siap ✅", "ok");
+    setTimeout(()=>setStatus(""), 1200);
+    return true;
   }
 
   // auto load
   loadList();
+  refreshReport2026();
 </script>
 </body>
 </html>
