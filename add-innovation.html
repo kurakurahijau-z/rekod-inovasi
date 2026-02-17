@@ -2,15 +2,16 @@
 <html lang="ms">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Tambah Inovasi</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="./config.js"></script>
   <script src="./app.js"></script>
 </head>
+
 <body class="min-h-screen bg-slate-50">
   <div class="max-w-2xl mx-auto p-6">
-    <h1 class="text-4xl font-extrabold">Tambah Inovasi</h1>
+    <h1 class="text-3xl font-extrabold">Tambah Inovasi</h1>
     <div class="text-slate-600 mt-1">Owner ikut login: <b id="emailText"></b></div>
 
     <div class="mt-6 bg-white border rounded-2xl p-6">
@@ -34,7 +35,7 @@
 
       <div class="mt-4">
         <label class="text-sm font-medium">Kategori</label>
-        <input id="kategori" class="w-full mt-2 px-4 py-2 border rounded-xl" placeholder="Contoh: Produk / Sistem / Modul / PdP" />
+        <input id="kategori" class="w-full mt-2 px-4 py-2 border rounded-xl" placeholder="Produk / Sistem / Modul / PdP" />
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
@@ -86,7 +87,7 @@
     });
 
     if (!r || !r.ok){
-      setStatus("Error: " + (r && r.error ? r.error : "unknown"), "err");
+      setStatus("Error: " + (r?.error || "unknown"), "err");
       return;
     }
 
