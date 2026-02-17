@@ -1,52 +1,85 @@
 <!doctype html>
 <html lang="ms">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Rekod Inovasi Jabatan – Login</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Rekod Inovasi Jabatan - Login</title>
+
+  <script src="app.js"></script>
+
+  <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <style>
+    body{ font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin:0; padding:48px; }
+    .card{ max-width:560px; margin:0 auto; padding:28px; border:1px solid #e5e7eb; border-radius:14px; }
+    .muted{ color:#6b7280; }
+    .err{ color:#dc2626; white-space:pre-wrap; margin-top:14px; }
+    .ok{ color:#16a34a; margin-top:14px; }
+    .btn{ display:inline-flex; align-items:center; gap:10px; padding:10px 14px; border:1px solid #d1d5db; border-radius:12px; background:#fff; cursor:pointer; }
+  </style>
 </head>
-<body style="font-family: system-ui; padding: 24px; max-width: 720px; margin: 0 auto;">
-  <h2>Rekod Inovasi Jabatan</h2>
-  <p>Log masuk guna akaun rasmi <b>@pms.edu.my</b>.</p>
+<body>
+  <div class="card">
+    <h1 style="margin:0 0 8px;">Rekod Inovasi Jabatan</h1>
+    <div class="muted">Log masuk guna akaun rasmi <b>@pms.edu.my</b></div>
 
-  <div id="g_id_onload"
-       data-client_id="637964120539-4knkg8lrjdaludsn8gncjidse7bpl23m.apps.googleusercontent.com"
-       data-callback="onGoogleSignIn"
-       data-auto_prompt="false"></div>
+    <div style="margin-top:18px;">
+      <div id="gbtn"></div>
+      <div id="status" class="muted" style="margin-top:10px;">Status: menunggu sign-in…</div>
+      <div id="msg" class="err"></div>
+      <div class="muted" style="margin-top:24px;">© 2026 kurakurahijau.com</div>
+    </div>
+  </div>
 
-  <div class="g_id_signin"
-       data-type="standard"
-       data-size="large"
-       data-theme="outline"
-       data-text="signin_with"
-       data-shape="pill"></div>
+<script>
+  // auto redirect kalau dah ada session
+  if (getToken() && getEmail()) {
+    location.href = "./dashboard.html";
+  }
 
-  <p id="msg" style="margin-top:16px; color:#b00020;"></p>
+  function showError(t){ document.getElementById("msg").className="err"; document.getElementById("msg").textContent = t; }
+  function showOk(t){ document.getElementById("msg").className="ok"; document.getElementById("msg").textContent = t; }
 
-  <script>
-    const BASE_URL = "https://script.google.com/macros/s/AKfycbw5B9rmptyZuBJ7nIf1rHZBA7in4emEJF2Ubaep0pFDerua6APFXsoU_XdJpyhuy7KO/exec";
+  function initGoogle(){
+    google.accounts.id.initialize({
+      client_id: "637964120539-4knkg8lrjdaludsn8gncjidse7bpl23m.apps.googleusercontent.com",
+      callback: async (resp) => {
+        try {
+          document.getElementById("status").textContent = "Status: verifying token…";
+          const idToken = resp.credential;
 
-    async function onGoogleSignIn(resp) {
-      const msg = document.getElementById("msg");
-      msg.textContent = "";
+          const out = await apiGet({ action:"loginGoogle", idToken });
+          if (!out.ok) {
+            showError(out.error || "Login failed");
+            document.getElementById("status").textContent = "Status: failed";
+            return;
+          }
 
-      try {
-        const idToken = resp.credential;
-        const url = `${BASE_URL}?action=loginGoogle&idToken=${encodeURIComponent(idToken)}`;
-        const r = await fetch(url);
-        const j = await r.json();
+          const email = out.data.email || "";
+          if (!email.endsWith("@"+window.APP_CONFIG.ALLOWED_DOMAIN)) {
+            showError("Email domain not allowed");
+            return;
+          }
 
-        if (!j.ok) throw new Error(j.error || "Login failed");
-
-        localStorage.setItem("appToken", j.data.appToken);
-        localStorage.setItem("userEmail", j.data.email);
-
-        location.href = "dashboard.html";
-      } catch (e) {
-        msg.textContent = e.message || String(e);
+          setSession(email, out.data.appToken);
+          showOk("Login OK: " + email);
+          document.getElementById("status").textContent = "Status: OK";
+          location.href = "./dashboard.html";
+        } catch (e) {
+          showError(String(e));
+          document.getElementById("status").textContent = "Status: error";
+        }
       }
-    }
-  </script>
+    });
+
+    google.accounts.id.renderButton(
+      document.getElementById("gbtn"),
+      { theme: "outline", size: "large", text: "signin_with", shape:"pill" }
+    );
+  }
+
+  window.onload = initGoogle;
+</script>
 </body>
 </html>
