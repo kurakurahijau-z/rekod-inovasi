@@ -1,85 +1,63 @@
 <!doctype html>
 <html lang="ms">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Rekod Inovasi Jabatan - Login</title>
-
-  <script src="app.js"></script>
-
-  <!-- Google Identity Services -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-
-  <style>
-    body{ font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin:0; padding:48px; }
-    .card{ max-width:560px; margin:0 auto; padding:28px; border:1px solid #e5e7eb; border-radius:14px; }
-    .muted{ color:#6b7280; }
-    .err{ color:#dc2626; white-space:pre-wrap; margin-top:14px; }
-    .ok{ color:#16a34a; margin-top:14px; }
-    .btn{ display:inline-flex; align-items:center; gap:10px; padding:10px 14px; border:1px solid #d1d5db; border-radius:12px; background:#fff; cursor:pointer; }
-  </style>
 </head>
-<body>
-  <div class="card">
-    <h1 style="margin:0 0 8px;">Rekod Inovasi Jabatan</h1>
-    <div class="muted">Log masuk guna akaun rasmi <b>@pms.edu.my</b></div>
+<body class="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+  <div class="w-full max-w-xl bg-white border rounded-2xl p-8">
+    <h1 class="text-3xl font-extrabold">Rekod Inovasi Jabatan</h1>
+    <p class="text-slate-600 mt-2">Log masuk guna akaun rasmi <b>@pms.edu.my</b></p>
 
-    <div style="margin-top:18px;">
-      <div id="gbtn"></div>
-      <div id="status" class="muted" style="margin-top:10px;">Status: menunggu sign-in…</div>
-      <div id="msg" class="err"></div>
-      <div class="muted" style="margin-top:24px;">© 2026 kurakurahijau.com</div>
-    </div>
+    <div class="mt-6" id="gBtn"></div>
+
+    <div id="statusText" class="text-sm mt-3 text-slate-500">Status: menunggu sign-in…</div>
+
+    <div class="mt-6 text-xs text-slate-500">© 2026 kurakurahijau.com</div>
   </div>
 
 <script>
-  // auto redirect kalau dah ada session
-  if (getToken() && getEmail()) {
+  // If already have session, go dashboard
+  if (getToken() && getEmail()){
     location.href = "./dashboard.html";
   }
 
-  function showError(t){ document.getElementById("msg").className="err"; document.getElementById("msg").textContent = t; }
-  function showOk(t){ document.getElementById("msg").className="ok"; document.getElementById("msg").textContent = t; }
+  function onGoogleCredential(resp){
+    const idToken = resp.credential;
+    setStatus("Verifying token…");
 
-  function initGoogle(){
-    google.accounts.id.initialize({
-      client_id: "637964120539-4knkg8lrjdaludsn8gncjidse7bpl23m.apps.googleusercontent.com",
-      callback: async (resp) => {
-        try {
-          document.getElementById("status").textContent = "Status: verifying token…";
-          const idToken = resp.credential;
+    apiGet({ action:"loginGoogle", idToken })
+      .then(r => {
+        if (!r || !r.ok) throw new Error((r && r.error) ? r.error : "Login failed");
 
-          const out = await apiGet({ action:"loginGoogle", idToken });
-          if (!out.ok) {
-            showError(out.error || "Login failed");
-            document.getElementById("status").textContent = "Status: failed";
-            return;
-          }
-
-          const email = out.data.email || "";
-          if (!email.endsWith("@"+window.APP_CONFIG.ALLOWED_DOMAIN)) {
-            showError("Email domain not allowed");
-            return;
-          }
-
-          setSession(email, out.data.appToken);
-          showOk("Login OK: " + email);
-          document.getElementById("status").textContent = "Status: OK";
-          location.href = "./dashboard.html";
-        } catch (e) {
-          showError(String(e));
-          document.getElementById("status").textContent = "Status: error";
+        const email = r.data.email;
+        if (!email.endsWith("@"+window.APP_CONFIG.ALLOWED_DOMAIN)){
+          throw new Error("Domain tak dibenarkan");
         }
-      }
+
+        setSession(email, r.data.appToken);
+        setStatus("Login berjaya ✅", "ok");
+        setTimeout(()=> location.href="./dashboard.html", 500);
+      })
+      .catch(err => setStatus("Error: " + err.message, "err"));
+  }
+
+  window.onload = function(){
+    google.accounts.id.initialize({
+      client_id: window.APP_CONFIG.CLIENT_ID,
+      callback: onGoogleCredential
     });
 
     google.accounts.id.renderButton(
-      document.getElementById("gbtn"),
-      { theme: "outline", size: "large", text: "signin_with", shape:"pill" }
+      document.getElementById("gBtn"),
+      { theme:"outline", size:"large" }
     );
   }
-
-  window.onload = initGoogle;
 </script>
 </body>
 </html>
