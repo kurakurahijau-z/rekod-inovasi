@@ -3,11 +3,50 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Rekod Inovasi Jabatan</title>
+  <title>Rekod Inovasi Jabatan – Login</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
-<body style="font-family: system-ui; padding: 24px;">
+<body style="font-family: system-ui; padding: 24px; max-width: 720px; margin: 0 auto;">
   <h2>Rekod Inovasi Jabatan</h2>
-  <p>Portal ini sedang disediakan.</p>
-  <p><b>Status:</b> GitHub Pages OK ✅</p>
+  <p>Log masuk guna akaun rasmi <b>@pms.edu.my</b>.</p>
+
+  <div id="g_id_onload"
+       data-client_id="637964120539-4knkg8lrjdaludsn8gncjidse7bpl23m.apps.googleusercontent.com"
+       data-callback="onGoogleSignIn"
+       data-auto_prompt="false"></div>
+
+  <div class="g_id_signin"
+       data-type="standard"
+       data-size="large"
+       data-theme="outline"
+       data-text="signin_with"
+       data-shape="pill"></div>
+
+  <p id="msg" style="margin-top:16px; color:#b00020;"></p>
+
+  <script>
+    const BASE_URL = "https://script.google.com/macros/s/AKfycbw5B9rmptyZuBJ7nIf1rHZBA7in4emEJF2Ubaep0pFDerua6APFXsoU_XdJpyhuy7KO/exec";
+
+    async function onGoogleSignIn(resp) {
+      const msg = document.getElementById("msg");
+      msg.textContent = "";
+
+      try {
+        const idToken = resp.credential;
+        const url = `${BASE_URL}?action=loginGoogle&idToken=${encodeURIComponent(idToken)}`;
+        const r = await fetch(url);
+        const j = await r.json();
+
+        if (!j.ok) throw new Error(j.error || "Login failed");
+
+        localStorage.setItem("appToken", j.data.appToken);
+        localStorage.setItem("userEmail", j.data.email);
+
+        location.href = "dashboard.html";
+      } catch (e) {
+        msg.textContent = e.message || String(e);
+      }
+    }
+  </script>
 </body>
 </html>
