@@ -2,103 +2,259 @@
 <html lang="ms">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Dashboard - Rekod Inovasi</title>
-  <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:40px;background:#fff;color:#111}
-    .wrap{max-width:980px;margin:0 auto}
-    h1{margin:0 0 6px 0}
-    .muted{color:#555;margin:0 0 18px 0}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 18px}
-    button{border:1px solid #cfcfcf;background:#fff;border-radius:10px;padding:10px 12px;cursor:pointer}
-    button:hover{background:#f7f7f7}
-    .danger{float:right}
-    .card{border:1px solid #e6e6e6;border-radius:14px;padding:16px;background:#fafafa}
-    pre{margin:0;white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.45}
-    .footer{color:#666;margin-top:14px;font-size:13px}
-  </style>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- app.js mesti ada window.APP_CONFIG + apiGet/getToken/getEmail/requireSessionOrRedirect -->
+  <script src="./app.js"></script>
 </head>
 
-<body>
-  <div class="wrap">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+<body class="bg-slate-50 text-slate-900">
+  <div class="max-w-5xl mx-auto px-4 py-10">
+    <div class="flex items-start justify-between gap-4">
       <div>
-        <h1>Dashboard</h1>
-        <p class="muted">Login: <b id="loginEmail">-</b></p>
+        <h1 class="text-3xl font-bold">Dashboard</h1>
+        <p class="mt-1 text-sm text-slate-600">
+          Login: <span id="loginEmail" class="font-medium"></span>
+        </p>
       </div>
-      <button id="btnLogout" class="danger">Logout</button>
+
+      <button id="btnLogout"
+        class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-100 transition">
+        Logout
+      </button>
     </div>
 
-    <div class="row">
-      <button id="btnList">List My Innovations</button>
-      <button id="btnReport">Generate Report 2026</button>
-      <button id="btnAdd" onclick="location.href='./add-innovation.html'">+ Tambah Inovasi</button>
+    <div class="mt-6 flex flex-wrap gap-2">
+      <button id="btnList"
+        class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-100 transition">
+        List My Innovations
+      </button>
+
+      <button id="btnReport"
+        class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-100 transition">
+        Generate Report 2026
+      </button>
+
+      <a href="./add-innovation.html"
+        class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-100 transition inline-flex items-center gap-2">
+        <span class="text-lg leading-none">+</span>
+        <span>Tambah Inovasi</span>
+      </a>
     </div>
 
-    <div class="card">
-      <pre id="out">{}</pre>
-    </div>
+    <!-- STATUS -->
+    <div id="statusBox" class="mt-4 text-sm text-slate-600"></div>
 
-    <div class="footer">© 2026 kurakurahijau.com</div>
+    <!-- SUMMARY CARDS -->
+    <div id="summaryCards" class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+    <!-- TABLE -->
+    <div class="mt-6 bg-white border rounded-2xl overflow-hidden">
+      <div class="px-4 py-3 border-b flex items-center justify-between">
+        <div class="font-semibold">Senarai Inovasi Saya</div>
+        <div class="text-xs text-slate-500" id="countLabel">0 rekod</div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-slate-50 text-slate-600">
+            <tr>
+              <th class="text-left font-medium px-4 py-3">Tajuk</th>
+              <th class="text-left font-medium px-4 py-3">Tahun</th>
+              <th class="text-left font-medium px-4 py-3">Kategori</th>
+              <th class="text-left font-medium px-4 py-3">Status</th>
+              <th class="text-left font-medium px-4 py-3">MyIPO</th>
+              <th class="text-left font-medium px-4 py-3">ID</th>
+            </tr>
+          </thead>
+          <tbody id="tbody" class="divide-y"></tbody>
+        </table>
+      </div>
+
+      <!-- DEBUG JSON (only show when error / user klik) -->
+      <details class="border-t">
+        <summary class="px-4 py-3 cursor-pointer text-sm text-slate-600">
+          Debug output (kalau nak tengok JSON)
+        </summary>
+        <pre id="debugPre" class="p-4 text-xs bg-slate-950 text-slate-100 overflow-auto">{}</pre>
+      </details>
+    </div>
   </div>
 
-  <!-- IMPORTANT: app.js mesti load dulu sebab ada apiGet(), getToken(), getEmail(), clearSession() -->
-  <script src="./app.js?v=9"></script>
+<script>
+  // --- Guard: mesti ada session ---
+  requireSessionOrRedirect();
 
-  <script>
-    // safety: kalau takde session, balik login
-    requireSessionOrRedirect();
+  const loginEmailEl = document.getElementById("loginEmail");
+  const statusBox = document.getElementById("statusBox");
+  const summaryCards = document.getElementById("summaryCards");
+  const tbody = document.getElementById("tbody");
+  const debugPre = document.getElementById("debugPre");
+  const countLabel = document.getElementById("countLabel");
 
-    // show email
-    document.getElementById("loginEmail").textContent = getEmail() || "-";
+  loginEmailEl.textContent = getEmail();
 
-    const outEl = document.getElementById("out");
-    function print(obj){
-      outEl.textContent = JSON.stringify(obj, null, 2);
-    }
+  function setStatus(msg, type="info"){
+    const map = {
+      info: "text-slate-600",
+      ok: "text-emerald-700",
+      err: "text-rose-700"
+    };
+    statusBox.className = `mt-4 text-sm ${map[type] || map.info}`;
+    statusBox.textContent = msg || "";
+  }
 
-    async function safeCall(fn){
-      try{
-        outEl.textContent = "Loading...";
-        const data = await fn();
-        print(data);
+  function esc(s){
+    return String(s ?? "").replace(/[&<>"']/g, m => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+    }[m]));
+  }
 
-        // kalau session invalid, auto logout + balik login
-        if (data && data.ok === false && String(data.error||"").toLowerCase().includes("invalid session")) {
-          clearSession();
-          location.href = "./index.html";
+  function pill(text){
+    const t = String(text || "").trim();
+    if (!t) return `<span class="px-2 py-1 rounded-full text-xs bg-slate-100 text-slate-700">-</span>`;
+    const low = t.toLowerCase();
+    let cls = "bg-slate-100 text-slate-700";
+    if (["aktif","active"].includes(low)) cls = "bg-emerald-100 text-emerald-800";
+    if (["draft"].includes(low)) cls = "bg-amber-100 text-amber-800";
+    if (["archived","inactive"].includes(low)) cls = "bg-rose-100 text-rose-800";
+    return `<span class="px-2 py-1 rounded-full text-xs ${cls}">${esc(t)}</span>`;
+  }
+
+  function renderCards(list){
+    const total = list.length;
+
+    const tahunSet = new Set(list.map(x => Number(x.tahun)).filter(Boolean));
+    const totalTahun = tahunSet.size;
+
+    const aktif = list.filter(x => String(x.status||"").toLowerCase().trim() === "aktif").length;
+
+    const myipoYes = list.filter(x => String(x.myipoStatus||"").toLowerCase().trim() === "yes").length;
+
+    const cards = [
+      { label:"Jumlah Inovasi", value: total },
+      { label:"Bil. Tahun Terlibat", value: totalTahun },
+      { label:"Status Aktif", value: aktif },
+      { label:"MyIPO (Yes)", value: myipoYes },
+    ];
+
+    summaryCards.innerHTML = cards.map(c => `
+      <div class="bg-white border rounded-2xl p-4">
+        <div class="text-xs text-slate-500">${esc(c.label)}</div>
+        <div class="mt-1 text-2xl font-bold">${esc(c.value)}</div>
+      </div>
+    `).join("");
+  }
+
+  function renderTable(list){
+    countLabel.textContent = `${list.length} rekod`;
+
+    tbody.innerHTML = list.map(row => {
+      const id = row.innovationId || row.innovationID || row.innovationid || "";
+      const myipo = (String(row.myipoStatus||"").trim() || "-") + (row.myipoNumber ? ` / ${row.myipoNumber}` : "");
+      return `
+        <tr class="hover:bg-slate-50">
+          <td class="px-4 py-3 font-medium">${esc(row.tajuk || "")}</td>
+          <td class="px-4 py-3">${esc(row.tahun || "")}</td>
+          <td class="px-4 py-3">${esc(row.kategori || "")}</td>
+          <td class="px-4 py-3">${pill(row.status)}</td>
+          <td class="px-4 py-3">${esc(myipo)}</td>
+          <td class="px-4 py-3">
+            <div class="flex items-center gap-2">
+              <code class="text-xs bg-slate-100 px-2 py-1 rounded">${esc(id).slice(0,10)}${id ? "…" : ""}</code>
+              ${id ? `<button data-copy="${esc(id)}" class="text-xs underline text-slate-600 hover:text-slate-900">Copy</button>` : ""}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
+
+    // copy handlers
+    tbody.querySelectorAll("button[data-copy]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const val = btn.getAttribute("data-copy");
+        try {
+          await navigator.clipboard.writeText(val);
+          setStatus("Innovation ID dah copy ✅", "ok");
+          setTimeout(()=>setStatus(""), 1200);
+        } catch (e) {
+          setStatus("Tak boleh copy (browser block). Copy manual je.", "err");
         }
-      }catch(err){
-        print({ ok:false, error:String(err) });
+      });
+    });
+  }
+
+  async function loadMyInnovations(){
+    setStatus("Loading senarai inovasi…");
+    try {
+      const r = await apiGet({ action:"listMyInnovations", appToken: getToken() });
+      debugPre.textContent = JSON.stringify(r, null, 2);
+
+      if (!r || !r.ok) {
+        setStatus(r?.error ? `Error: ${r.error}` : "Error: unknown", "err");
+        renderCards([]);
+        renderTable([]);
+        return;
       }
+
+      const list = Array.isArray(r.data) ? r.data : [];
+      // normalize keys jadi consistent
+      const norm = list.map(x => ({
+        innovationId: x.innovationId ?? x.innovationID ?? x.innovationid ?? x["innovationId"] ?? x["innovationID"] ?? "",
+        tajuk: x.tajuk ?? x["tajuk"] ?? "",
+        tahun: x.tahun ?? x["tahun"] ?? "",
+        kategori: x.kategori ?? x["kategori"] ?? "",
+        status: x.status ?? x["status"] ?? "",
+        myipoStatus: x.myipoStatus ?? x["myipoStatus"] ?? "",
+        myipoNumber: x.myipoNumber ?? x["myipoNumber"] ?? "",
+        ownerEmail: x.ownerEmail ?? x["ownerEmail"] ?? "",
+        createdAt: x.createdAt ?? x["createdAt"] ?? ""
+      }));
+
+      renderCards(norm);
+      renderTable(norm);
+
+      setStatus("Siap ✅", "ok");
+      setTimeout(()=>setStatus(""), 1000);
+
+    } catch (err) {
+      debugPre.textContent = String(err);
+      setStatus("Error fetch: " + String(err), "err");
+      renderCards([]);
+      renderTable([]);
     }
+  }
 
-    // Button: List My Innovations
-    document.getElementById("btnList").addEventListener("click", () => {
-      safeCall(() => apiGet({
-        action: "listMyInnovations",
-        appToken: getToken()
-      }));
-    });
+  async function generateReport2026(){
+    setStatus("Generate report 2026…");
+    try{
+      const r = await apiGet({ action:"generateReport", tahun:"2026", appToken:getToken() });
+      debugPre.textContent = JSON.stringify(r, null, 2);
 
-    // Button: Generate Report
-    document.getElementById("btnReport").addEventListener("click", () => {
-      safeCall(() => apiGet({
-        action: "generateReport",
-        tahun: "2026",
-        appToken: getToken()
-      }));
-    });
+      if (!r || !r.ok){
+        setStatus(r?.error ? `Error: ${r.error}` : "Error generate report", "err");
+        return;
+      }
+      setStatus("Report 2026 berjaya dijana ✅ (rujuk Debug output kalau nak tengok JSON)", "ok");
+      setTimeout(()=>setStatus(""), 1500);
+    } catch(err){
+      debugPre.textContent = String(err);
+      setStatus("Error report: " + String(err), "err");
+    }
+  }
 
-    // Logout
-    document.getElementById("btnLogout").addEventListener("click", () => {
-      clearSession();
-      location.href = "./index.html";
-    });
+  document.getElementById("btnLogout").addEventListener("click", () => {
+    clearSession();
+    location.href = "./index.html";
+  });
 
-    // Optional: auto load list bila dashboard buka
-    // (kalau kau tak nak auto, comment line bawah ni)
-    safeCall(() => apiGet({ action:"listMyInnovations", appToken:getToken() }));
-  </script>
+  document.getElementById("btnList").addEventListener("click", loadMyInnovations);
+  document.getElementById("btnReport").addEventListener("click", generateReport2026);
+
+  // AUTO LOAD bila masuk dashboard
+  loadMyInnovations();
+</script>
 </body>
 </html>
