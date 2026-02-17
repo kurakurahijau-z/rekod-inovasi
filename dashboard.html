@@ -2,68 +2,103 @@
 <html lang="ms">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Dashboard - Rekod Inovasi</title>
-  <script src="app.js"></script>
   <style>
-    body{ font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin:0; padding:48px; }
-    .wrap{ max-width:900px; margin:0 auto; }
-    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    button,a.btn{ padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; background:#fff; cursor:pointer; text-decoration:none; color:#111827; }
-    pre{ padding:14px; border:1px solid #e5e7eb; border-radius:12px; background:#fafafa; overflow:auto; }
-    .muted{ color:#6b7280; }
-    .top{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:40px;background:#fff;color:#111}
+    .wrap{max-width:980px;margin:0 auto}
+    h1{margin:0 0 6px 0}
+    .muted{color:#555;margin:0 0 18px 0}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 18px}
+    button{border:1px solid #cfcfcf;background:#fff;border-radius:10px;padding:10px 12px;cursor:pointer}
+    button:hover{background:#f7f7f7}
+    .danger{float:right}
+    .card{border:1px solid #e6e6e6;border-radius:14px;padding:16px;background:#fafafa}
+    pre{margin:0;white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.45}
+    .footer{color:#666;margin-top:14px;font-size:13px}
   </style>
 </head>
+
 <body>
   <div class="wrap">
-    <div class="top">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
       <div>
-        <h1 style="margin:0 0 6px;">Dashboard</h1>
-        <div class="muted">Login: <span id="email"></span></div>
+        <h1>Dashboard</h1>
+        <p class="muted">Login: <b id="loginEmail">-</b></p>
       </div>
-      <button onclick="logout()">Logout</button>
+      <button id="btnLogout" class="danger">Logout</button>
     </div>
 
-    <div class="row" style="margin-top:16px;">
-      <button onclick="listMine()">List My Innovations</button>
-      <button onclick="genReport()">Generate Report 2026</button>
-      <a class="btn" href="./add-innovation.html">+ Tambah Inovasi</a>
+    <div class="row">
+      <button id="btnList">List My Innovations</button>
+      <button id="btnReport">Generate Report 2026</button>
+      <button id="btnAdd" onclick="location.href='./add-innovation.html'">+ Tambah Inovasi</button>
     </div>
 
-    <div style="margin-top:16px;">
+    <div class="card">
       <pre id="out">{}</pre>
     </div>
 
-    <div class="muted" style="margin-top:18px;">© 2026 kurakurahijau.com</div>
+    <div class="footer">© 2026 kurakurahijau.com</div>
   </div>
 
-<script>
-  requireSessionOrRedirect();
+  <!-- IMPORTANT: app.js mesti load dulu sebab ada apiGet(), getToken(), getEmail(), clearSession() -->
+  <script src="./app.js?v=9"></script>
 
-  document.getElementById("email").textContent = getEmail();
+  <script>
+    // safety: kalau takde session, balik login
+    requireSessionOrRedirect();
 
-  function logout(){
-    clearSession();
-    location.href = "./index.html";
-  }
+    // show email
+    document.getElementById("loginEmail").textContent = getEmail() || "-";
 
-  async function genReport(){
-    const out = await apiGet({ action:"generateReport", appToken: getToken(), tahun: 2026 });
-    document.getElementById("out").textContent = JSON.stringify(out, null, 2);
-    if (!out.ok && (out.error || "").toLowerCase().includes("session")) {
-      // kalau session invalid, buang session supaya user login semula
-      clearSession();
+    const outEl = document.getElementById("out");
+    function print(obj){
+      outEl.textContent = JSON.stringify(obj, null, 2);
     }
-  }
 
-  async function listMine(){
-    const out = await apiGet({ action:"listMyInnovations", appToken: getToken() });
-    document.getElementById("out").textContent = JSON.stringify(out, null, 2);
-    if (!out.ok && (out.error || "").toLowerCase().includes("session")) {
-      clearSession();
+    async function safeCall(fn){
+      try{
+        outEl.textContent = "Loading...";
+        const data = await fn();
+        print(data);
+
+        // kalau session invalid, auto logout + balik login
+        if (data && data.ok === false && String(data.error||"").toLowerCase().includes("invalid session")) {
+          clearSession();
+          location.href = "./index.html";
+        }
+      }catch(err){
+        print({ ok:false, error:String(err) });
+      }
     }
-  }
-</script>
+
+    // Button: List My Innovations
+    document.getElementById("btnList").addEventListener("click", () => {
+      safeCall(() => apiGet({
+        action: "listMyInnovations",
+        appToken: getToken()
+      }));
+    });
+
+    // Button: Generate Report
+    document.getElementById("btnReport").addEventListener("click", () => {
+      safeCall(() => apiGet({
+        action: "generateReport",
+        tahun: "2026",
+        appToken: getToken()
+      }));
+    });
+
+    // Logout
+    document.getElementById("btnLogout").addEventListener("click", () => {
+      clearSession();
+      location.href = "./index.html";
+    });
+
+    // Optional: auto load list bila dashboard buka
+    // (kalau kau tak nak auto, comment line bawah ni)
+    safeCall(() => apiGet({ action:"listMyInnovations", appToken:getToken() }));
+  </script>
 </body>
 </html>
