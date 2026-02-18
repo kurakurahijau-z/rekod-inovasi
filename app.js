@@ -35,7 +35,6 @@ async function apiPost(action, params={}, body={}) {
     body: JSON.stringify(body)
   });
 
-  // Apps Script sometimes returns text; parse safely
   const t = await r.text();
   try { return JSON.parse(t); }
   catch { return { ok:false, error:"Invalid JSON from server", raw:t }; }
@@ -58,7 +57,10 @@ async function loadMe() {
 // ===== Google Sign-In callback =====
 async function onGoogleCredentialResponse(resp) {
   try {
-    qs("#loginStatus").textContent = "Signing in…";
+    const st = qs("#loginStatus");
+    if (st) st.textContent = "Signing in…";
+
+    // Keep current working flow: POST text/plain (CORS-safe)
     const r = await apiPost("loginGoogle", {}, { credential: resp.credential });
     if (!r.ok) throw new Error(r.error || "Login failed");
 
@@ -68,7 +70,8 @@ async function onGoogleCredentialResponse(resp) {
 
     location.href = "./dashboard.html";
   } catch (e) {
-    qs("#loginStatus").textContent = "Login failed: " + e.message;
+    const st = qs("#loginStatus");
+    if (st) st.textContent = "Login failed: " + e.message;
   }
 }
 
@@ -87,6 +90,14 @@ async function dashboardInit() {
   await refreshReport("2026");
 }
 
+function norm_(v){
+  return String(v ?? "")
+    .toLowerCase()
+    .replace(/\u200B/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function refreshMyInnovations() {
   const token = getToken();
   const r = await apiGet("listMyInnovations", { token });
@@ -96,7 +107,7 @@ async function refreshMyInnovations() {
 
   const items = (r.ok ? (r.items || []) : []);
 
-  // ✅ KIRAAN BETUL (dari items)
+  // ===== Cards =====
   const years = new Set();
   let aktifCount = 0;
   let myipoYesCount = 0;
@@ -105,21 +116,20 @@ async function refreshMyInnovations() {
     const y = String(it.tahun || "").trim();
     if (y) years.add(y);
 
-    const st = String(it.status || "").trim().toLowerCase();
-    if (st === "aktif") aktifCount++;
+    const st = norm_(it.status);
+    if (st === "aktif" || st.includes("aktif")) aktifCount++;
 
-    const ms = String(it.myipoStatus || "").trim().toLowerCase();
-    if (ms === "yes") myipoYesCount++;
+    const ms = norm_(it.myipoStatus);
+    if (ms === "yes" || ms === "y" || ms === "ya" || ms.includes("yes")) myipoYesCount++;
   }
 
-  // Update cards (kalau id wujud)
   const elTotal = qs("#countTotal");
   const elYears = qs("#countYears");
   const elAktif = qs("#countAktif");
   const elMyipo = qs("#countMyipoYes");
 
   if (elTotal) elTotal.textContent = items.length;
-  if (elYears) elYears.textContent = years.size;         // ✅ bukan "2026"
+  if (elYears) elYears.textContent = years.size;
   if (elAktif) elAktif.textContent = aktifCount;
   if (elMyipo) elMyipo.textContent = myipoYesCount;
 
@@ -132,7 +142,7 @@ async function refreshMyInnovations() {
 
   for (const it of items) {
     const myipo = `${it.myipoStatus || ""} / ${it.myipoNumber || ""}`.trim();
-    const pillCls = (String(it.status||"").toLowerCase()==="aktif") ? "ok" : "warn";
+    const pillCls = (norm_(it.status) === "aktif" || norm_(it.status).includes("aktif")) ? "ok" : "warn";
 
     body.innerHTML += `
       <tr>
@@ -152,22 +162,8 @@ async function refreshReport(year) {
   const r = await apiGet("generateReport", { token, year });
   if (!r.ok) return;
 
-  const items = (r.items || []);
-
-  // ✅ SUMMARY BETUL (kira dari items)
-  let total = items.length;
-  let aktif = 0;
-  let myipoYes = 0;
-  let myipoNo = 0;
-
-  for (const it of items) {
-    const st = String(it.status || "").trim().toLowerCase();
-    if (st === "aktif") aktif++;
-
-    const ms = String(it.myipoStatus || "").trim().toLowerCase();
-    if (ms === "yes") myipoYes++;
-    else myipoNo++;
-  }
+  // ✅ guna summary dari backend (yang dah normalize betul)
+  const s = r.summary || { total:0, aktif:0, myipoYes:0, myipoNo:0 };
 
   const elYear = qs("#rYear");
   const elTotal = qs("#rTotal");
@@ -176,11 +172,12 @@ async function refreshReport(year) {
   const elNo = qs("#rMyipoNo");
 
   if (elYear)  elYear.textContent  = String(r.year || year);
-  if (elTotal) elTotal.textContent = total;
-  if (elAktif) elAktif.textContent = aktif;       // ✅ akan jadi 1
-  if (elYes)   elYes.textContent   = myipoYes;    // ✅ akan jadi 1
-  if (elNo)    elNo.textContent    = myipoNo;
+  if (elTotal) elTotal.textContent = String(s.total ?? 0);
+  if (elAktif) elAktif.textContent = String(s.aktif ?? 0);
+  if (elYes)   elYes.textContent   = String(s.myipoYes ?? 0);
+  if (elNo)    elNo.textContent    = String(s.myipoNo ?? 0);
 
+  const items = (r.items || []);
   const tb = qs("#reportBody");
   if (!tb) return;
 
@@ -206,9 +203,7 @@ async function refreshReport(year) {
   }
 }
 
-function doPrint() {
-  window.print();
-}
+function doPrint() { window.print(); }
 
 function doLogout() {
   clearToken();
@@ -237,13 +232,16 @@ async function submitInnovation(e) {
     myipoNumber: qs("#myipoNumber").value.trim()
   };
 
-  qs("#saveMsg").textContent = "Saving…";
+  const msg = qs("#saveMsg");
+  if (msg) msg.textContent = "Saving…";
+
   const r = await apiPost("addInnovation", { token }, payload);
   if (!r.ok) {
-    qs("#saveMsg").textContent = "Gagal: " + (r.error || "");
+    if (msg) msg.textContent = "Gagal: " + (r.error || "");
     return;
   }
-  qs("#saveMsg").textContent = "Berjaya simpan ✅";
+
+  if (msg) msg.textContent = "Berjaya simpan ✅";
   setTimeout(()=> location.href="./dashboard.html", 600);
 }
 
