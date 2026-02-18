@@ -1,8 +1,7 @@
-// app.js (FULL REPLACE)
+// app.js
 const cfg = window.APP_CONFIG;
 
 function qs(sel){ return document.querySelector(sel); }
-function qsa(sel){ return Array.from(document.querySelectorAll(sel)); }
 
 function setToken(token){ localStorage.setItem("token", token); }
 function getToken(){ return localStorage.getItem("token") || ""; }
@@ -12,35 +11,39 @@ function clearToken(){
   localStorage.removeItem("role");
 }
 
-function setText(sel, val){
-  const el = (sel.startsWith("#") || sel.startsWith(".")) ? qs(sel) : qs("#"+sel);
-  if (el) el.textContent = String(val ?? "");
+// --- Safe JSON fetch helpers ---
+async function fetchJson(url, options = {}) {
+  const r = await fetch(url, options);
+  const txt = await r.text();
+  try { return JSON.parse(txt); }
+  catch {
+    // Kalau Apps Script bagi HTML error page / redirect page
+    return { ok:false, error:"Non-JSON response", raw: txt?.slice(0, 200) };
+  }
 }
 
-function safeJson(r){
-  return r.json().catch(() => ({ ok:false, error:"Invalid JSON response" }));
+function buildUrl(action, params={}) {
+  const url = new URL(cfg.API_BASE);
+  url.searchParams.set("action", action);
+  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+  return url.toString();
 }
 
 async function apiGet(action, params={}) {
-  const url = new URL(cfg.API_BASE);
-  url.searchParams.set("action", action);
-  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
-  const r = await fetch(url.toString(), { method:"GET" });
-  return safeJson(r);
+  const url = buildUrl(action, params);
+  return fetchJson(url, { method:"GET" });
 }
 
 async function apiPost(action, params={}, body={}) {
-  const url = new URL(cfg.API_BASE);
-  url.searchParams.set("action", action);
-  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
-  const r = await fetch(url.toString(), {
+  const url = buildUrl(action, params);
+  return fetchJson(url, {
     method:"POST",
     headers:{ "Content-Type":"application/json" },
     body: JSON.stringify(body)
   });
-  return safeJson(r);
 }
 
+// --- Auth guards ---
 function requireAuthOrRedirect() {
   const token = getToken();
   if (!token) location.href = "./index.html";
@@ -50,59 +53,29 @@ async function loadMe() {
   const token = getToken();
   const r = await apiGet("me", { token });
   if (!r.ok) { clearToken(); location.href="./index.html"; return null; }
-  localStorage.setItem("email", r.email || "");
-  localStorage.setItem("role", r.role || "user");
+  localStorage.setItem("email", r.email);
+  localStorage.setItem("role", r.role);
   return r;
 }
 
 // ===== Google Sign-In callback =====
 async function onGoogleCredentialResponse(resp) {
   try {
-    setText("#loginStatus", "Signing in…");
+    qs("#loginStatus").textContent = "Signing in…";
+
+    // NOTE: action backend = loginGoogle
     const r = await apiPost("loginGoogle", {}, { credential: resp.credential });
+
     if (!r.ok) throw new Error(r.error || "Login failed");
 
     setToken(r.token);
-    localStorage.setItem("email", r.email || "");
-    localStorage.setItem("role", r.role || "user");
+    localStorage.setItem("email", r.email);
+    localStorage.setItem("role", r.role);
 
     location.href = "./dashboard.html";
   } catch (e) {
-    setText("#loginStatus", "Login failed: " + e.message);
+    qs("#loginStatus").textContent = "Login failed: " + (e?.message || String(e));
   }
-}
-
-/**
- * Kira summary secara konsisten dari array items.
- * Ini fix isu: row ada, tapi summary 0-0-0.
- */
-function computeSummaryFromItems(items){
-  const norm = (s) => String(s || "").trim().toLowerCase();
-  const isAktif = (it) => norm(it.status) === "aktif";
-  const myipoYes = (it) => {
-    const ms = norm(it.myipoStatus);
-    // support pelbagai format: "yes", "ya", "y", "true"
-    if (["yes","ya","y","true"].includes(ms)) return true;
-    // kalau backend bagi field "myipo" string macam "yes / LYC..."
-    const myipo = norm(it.myipo);
-    if (myipo.startsWith("yes") || myipo.startsWith("ya")) return true;
-    return false;
-  };
-
-  const years = new Set(items.map(it => String(it.tahun || "").trim()).filter(Boolean));
-
-  const total = items.length;
-  const aktif = items.filter(isAktif).length;
-  const yes = items.filter(myipoYes).length;
-  const no = total - yes;
-
-  return {
-    total,
-    yearsCount: years.size,
-    aktif,
-    myipoYes: yes,
-    myipoNo: no
-  };
 }
 
 // ===== Dashboard =====
@@ -111,57 +84,50 @@ async function dashboardInit() {
   const me = await loadMe();
   if (!me) return;
 
-  setText("#meEmail", me.email || "");
-  setText("#meRole", me.role || "user");
+  qs("#meEmail").textContent = me.email || "-";
+  qs("#meRole").textContent = me.role || "-";
 
-  // load list dulu, sebab kita nak kira "Bil. Tahun Terlibat" dari list
-  const items = await refreshMyInnovations(true);
-
-  // kira top cards dari list (bukan dari report)
-  const sumTop = computeSummaryFromItems(items);
-
-  // ID card yang kau mungkin ada (aku letak fallback banyak nama supaya tak pecah)
-  // - jumlah inovasi
-  setText("#countTotal", sumTop.total);
-  setText("#totalInnovations", sumTop.total);
-
-  // - bil. tahun terlibat (SEPATUTNYA count, bukan 2026)
-  setText("#countYears", sumTop.yearsCount);
-  setText("#yearsInvolved", sumTop.yearsCount);
-
-  // - status aktif
-  setText("#countAktif", sumTop.aktif);
-  setText("#countActive", sumTop.aktif);
-
-  // - myipo yes
-  setText("#countMyipoYes", sumTop.myipoYes);
-  setText("#countIPOYes", sumTop.myipoYes);
-
-  // report 2026 (tetap jalan)
+  await refreshMyInnovations();
   await refreshReport("2026");
 }
 
-/**
- * @param {boolean} returnItems - kalau true, function akan return array items
- */
-async function refreshMyInnovations(returnItems=false) {
+// --- Counts helpers ---
+function norm(s){ return String(s||"").trim().toLowerCase(); }
+
+function calcSummaryFromItems(items) {
+  const years = new Set(items.map(it => String(it.tahun||"").trim()).filter(Boolean));
+  const aktif = items.filter(it => norm(it.status) === "aktif").length;
+  const myipoYes = items.filter(it => norm(it.myipoStatus) === "yes").length;
+  const myipoNo = items.filter(it => norm(it.myipoStatus) === "no").length;
+
+  return {
+    total: items.length,
+    yearsCount: years.size,
+    aktif,
+    myipoYes,
+    myipoNo
+  };
+}
+
+async function refreshMyInnovations() {
   const token = getToken();
   const r = await apiGet("listMyInnovations", { token });
 
   const body = qs("#myListBody");
-  if (body) body.innerHTML = "";
+  body.innerHTML = "";
 
-  const items = (r.ok && Array.isArray(r.items)) ? r.items : [];
+  const items = (r.ok ? (r.items || []) : []);
 
-  // kalau tiada table pun, still return items untuk kira-kira
-  if (!body) return returnItems ? items : undefined;
-
-  // jumlah inovasi
-  setText("#countTotal", items.length);
+  // ✅ betulkan cards atas
+  const sum = calcSummaryFromItems(items);
+  qs("#countTotal").textContent = sum.total;
+  if (qs("#countYears")) qs("#countYears").textContent = sum.yearsCount;     // kalau ada element ni
+  if (qs("#countAktif")) qs("#countAktif").textContent = sum.aktif;          // kalau ada element ni
+  if (qs("#countMyipoYes")) qs("#countMyipoYes").textContent = sum.myipoYes; // kalau ada element ni
 
   if (!items.length) {
     body.innerHTML = `<tr><td colspan="6" class="muted">Belum ada rekod inovasi.</td></tr>`;
-    return returnItems ? items : undefined;
+    return;
   }
 
   for (const it of items) {
@@ -171,51 +137,61 @@ async function refreshMyInnovations(returnItems=false) {
         <td>${escapeHtml(it.tajuk || "")}</td>
         <td>${escapeHtml(it.tahun || "")}</td>
         <td>${escapeHtml(it.kategori || "")}</td>
-        <td><span class="pill ${((String(it.status||"").toLowerCase()==="aktif")?"ok":"warn")}">${escapeHtml(it.status||"")}</span></td>
+        <td><span class="pill ${((norm(it.status)==="aktif")?"ok":"warn")}">${escapeHtml(it.status||"")}</span></td>
         <td>${escapeHtml(myipo)}</td>
         <td><code>${escapeHtml(it.innovationId||"")}</code></td>
       </tr>
     `;
   }
-
-  return returnItems ? items : undefined;
 }
 
 async function refreshReport(year) {
   const token = getToken();
   const r = await apiGet("generateReport", { token, year });
+
   if (!r.ok) return;
 
-  const items = Array.isArray(r.items) ? r.items : [];
+  const items = r.items || [];
 
-  // ✅ FIX: guna kiraan dari items (bukan percaya r.summary semata-mata)
-  const sum = computeSummaryFromItems(items);
+  // ✅ guna summary backend kalau elok, kalau nampak pelik -> fallback kira sendiri
+  let summary = r.summary || {};
+  const fallback = calcSummaryFromItems(items);
 
-  setText("#rYear", year);
-  setText("#rTotal", sum.total);
-  setText("#rAktif", sum.aktif);
-  setText("#rMyipoYes", sum.myipoYes);
-  setText("#rMyipoNo", sum.myipoNo);
+  // kalau backend bagi 0 tapi items ada data, kita override
+  const suspicious =
+    items.length > 0 &&
+    (Number(summary.aktif||0) === 0 && fallback.aktif > 0) &&
+    (Number(summary.myipoYes||0) === 0 && fallback.myipoYes > 0);
+
+  if (suspicious) summary = {
+    total: fallback.total,
+    aktif: fallback.aktif,
+    myipoYes: fallback.myipoYes,
+    myipoNo: fallback.myipoNo
+  };
+
+  qs("#rYear").textContent = r.year || year;
+  qs("#rTotal").textContent = summary.total ?? items.length;
+  qs("#rAktif").textContent = summary.aktif ?? fallback.aktif;
+  qs("#rMyipoYes").textContent = summary.myipoYes ?? fallback.myipoYes;
+  qs("#rMyipoNo").textContent = summary.myipoNo ?? fallback.myipoNo;
 
   const tb = qs("#reportBody");
-  if (!tb) return;
-
   tb.innerHTML = "";
+
   if (!items.length) {
-    tb.innerHTML = `<tr><td colspan="4" class="muted">Tiada rekod untuk tahun ${escapeHtml(String(year))}.</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="4" class="muted">Tiada rekod untuk tahun ${escapeHtml(r.year || year)}.</td></tr>`;
     return;
   }
 
   for (const it of items) {
-    // support kalau backend bagi myipo siap siap
-    const myipo = it.myipo ?? `${it.myipoStatus || ""} / ${it.myipoNumber || ""}`.trim();
-
+    const myipo = `${it.myipoStatus || ""} / ${it.myipoNumber || ""}`.trim();
     tb.innerHTML += `
       <tr>
         <td>${escapeHtml(it.tajuk||"")}</td>
         <td>${escapeHtml(it.kategori||"")}</td>
         <td>${escapeHtml(it.status||"")}</td>
-        <td>${escapeHtml(myipo||"")}</td>
+        <td>${escapeHtml(myipo)}</td>
       </tr>
     `;
   }
@@ -233,7 +209,7 @@ async function addInnovationInit() {
   requireAuthOrRedirect();
   const me = await loadMe();
   if (!me) return;
-  setText("#meEmail", me.email || "");
+  qs("#meEmail").textContent = me.email;
 }
 
 async function submitInnovation(e) {
@@ -241,21 +217,23 @@ async function submitInnovation(e) {
   const token = getToken();
 
   const payload = {
-    tajuk: qs("#tajuk")?.value?.trim() || "",
-    tahun: qs("#tahun")?.value?.trim() || "",
-    kategori: qs("#kategori")?.value?.trim() || "",
-    status: qs("#status")?.value?.trim() || "",
-    myipoStatus: qs("#myipoStatus")?.value?.trim() || "",
-    myipoNumber: qs("#myipoNumber")?.value?.trim() || ""
+    tajuk: qs("#tajuk").value.trim(),
+    tahun: qs("#tahun").value.trim(),
+    kategori: qs("#kategori").value.trim(),
+    status: qs("#status").value.trim(),
+    myipoStatus: qs("#myipoStatus").value.trim(),
+    myipoNumber: qs("#myipoNumber").value.trim()
   };
 
-  setText("#saveMsg", "Saving…");
+  qs("#saveMsg").textContent = "Saving…";
   const r = await apiPost("addInnovation", { token }, payload);
+
   if (!r.ok) {
-    setText("#saveMsg", "Gagal: " + (r.error || ""));
+    qs("#saveMsg").textContent = "Gagal: " + (r.error || "");
     return;
   }
-  setText("#saveMsg", "Berjaya simpan ✅");
+
+  qs("#saveMsg").textContent = "Berjaya simpan ✅";
   setTimeout(()=> location.href="./dashboard.html", 600);
 }
 
