@@ -11,39 +11,28 @@ function clearToken(){
   localStorage.removeItem("role");
 }
 
-// --- Safe JSON fetch helpers ---
-async function fetchJson(url, options = {}) {
-  const r = await fetch(url, options);
-  const txt = await r.text();
-  try { return JSON.parse(txt); }
-  catch {
-    // Kalau Apps Script bagi HTML error page / redirect page
-    return { ok:false, error:"Non-JSON response", raw: txt?.slice(0, 200) };
-  }
-}
-
-function buildUrl(action, params={}) {
+async function apiGet(action, params={}) {
   const url = new URL(cfg.API_BASE);
   url.searchParams.set("action", action);
   Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
-  return url.toString();
+  const r = await fetch(url.toString(), { method:"GET" });
+  return r.json();
 }
 
-async function apiGet(action, params={}) {
-  const url = buildUrl(action, params);
-  return fetchJson(url, { method:"GET" });
-}
-
+// POST tanpa application/json header (kurangkan risiko preflight)
 async function apiPost(action, params={}, body={}) {
-  const url = buildUrl(action, params);
-  return fetchJson(url, {
+  const url = new URL(cfg.API_BASE);
+  url.searchParams.set("action", action);
+  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+
+  const r = await fetch(url.toString(), {
     method:"POST",
-    headers:{ "Content-Type":"application/json" },
+    // jangan set Content-Type application/json
     body: JSON.stringify(body)
   });
+  return r.json();
 }
 
-// --- Auth guards ---
 function requireAuthOrRedirect() {
   const token = getToken();
   if (!token) location.href = "./index.html";
@@ -63,8 +52,8 @@ async function onGoogleCredentialResponse(resp) {
   try {
     qs("#loginStatus").textContent = "Signing in…";
 
-    // NOTE: action backend = loginGoogle
-    const r = await apiPost("loginGoogle", {}, { credential: resp.credential });
+    // IMPORTANT: use GET to avoid CORS preflight
+    const r = await apiGet("loginGoogle", { credential: resp.credential });
 
     if (!r.ok) throw new Error(r.error || "Login failed");
 
@@ -74,7 +63,7 @@ async function onGoogleCredentialResponse(resp) {
 
     location.href = "./dashboard.html";
   } catch (e) {
-    qs("#loginStatus").textContent = "Login failed: " + (e?.message || String(e));
+    qs("#loginStatus").textContent = "Login failed: " + e.message;
   }
 }
 
@@ -84,46 +73,21 @@ async function dashboardInit() {
   const me = await loadMe();
   if (!me) return;
 
-  qs("#meEmail").textContent = me.email || "-";
-  qs("#meRole").textContent = me.role || "-";
+  qs("#meEmail").textContent = me.email;
+  qs("#meRole").textContent = me.role;
 
   await refreshMyInnovations();
   await refreshReport("2026");
 }
 
-// --- Counts helpers ---
-function norm(s){ return String(s||"").trim().toLowerCase(); }
-
-function calcSummaryFromItems(items) {
-  const years = new Set(items.map(it => String(it.tahun||"").trim()).filter(Boolean));
-  const aktif = items.filter(it => norm(it.status) === "aktif").length;
-  const myipoYes = items.filter(it => norm(it.myipoStatus) === "yes").length;
-  const myipoNo = items.filter(it => norm(it.myipoStatus) === "no").length;
-
-  return {
-    total: items.length,
-    yearsCount: years.size,
-    aktif,
-    myipoYes,
-    myipoNo
-  };
-}
-
 async function refreshMyInnovations() {
   const token = getToken();
   const r = await apiGet("listMyInnovations", { token });
-
   const body = qs("#myListBody");
   body.innerHTML = "";
 
-  const items = (r.ok ? (r.items || []) : []);
-
-  // ✅ betulkan cards atas
-  const sum = calcSummaryFromItems(items);
-  qs("#countTotal").textContent = sum.total;
-  if (qs("#countYears")) qs("#countYears").textContent = sum.yearsCount;     // kalau ada element ni
-  if (qs("#countAktif")) qs("#countAktif").textContent = sum.aktif;          // kalau ada element ni
-  if (qs("#countMyipoYes")) qs("#countMyipoYes").textContent = sum.myipoYes; // kalau ada element ni
+  const items = (r.ok ? r.items : []);
+  qs("#countTotal").textContent = items.length;
 
   if (!items.length) {
     body.innerHTML = `<tr><td colspan="6" class="muted">Belum ada rekod inovasi.</td></tr>`;
@@ -137,7 +101,7 @@ async function refreshMyInnovations() {
         <td>${escapeHtml(it.tajuk || "")}</td>
         <td>${escapeHtml(it.tahun || "")}</td>
         <td>${escapeHtml(it.kategori || "")}</td>
-        <td><span class="pill ${((norm(it.status)==="aktif")?"ok":"warn")}">${escapeHtml(it.status||"")}</span></td>
+        <td><span class="pill ${((it.status||"").toLowerCase()==="aktif")?"ok":"warn"}">${escapeHtml(it.status||"")}</span></td>
         <td>${escapeHtml(myipo)}</td>
         <td><code>${escapeHtml(it.innovationId||"")}</code></td>
       </tr>
@@ -148,61 +112,34 @@ async function refreshMyInnovations() {
 async function refreshReport(year) {
   const token = getToken();
   const r = await apiGet("generateReport", { token, year });
-
   if (!r.ok) return;
 
-  const items = r.items || [];
-
-  // ✅ guna summary backend kalau elok, kalau nampak pelik -> fallback kira sendiri
-  let summary = r.summary || {};
-  const fallback = calcSummaryFromItems(items);
-
-  // kalau backend bagi 0 tapi items ada data, kita override
-  const suspicious =
-    items.length > 0 &&
-    (Number(summary.aktif||0) === 0 && fallback.aktif > 0) &&
-    (Number(summary.myipoYes||0) === 0 && fallback.myipoYes > 0);
-
-  if (suspicious) summary = {
-    total: fallback.total,
-    aktif: fallback.aktif,
-    myipoYes: fallback.myipoYes,
-    myipoNo: fallback.myipoNo
-  };
-
-  qs("#rYear").textContent = r.year || year;
-  qs("#rTotal").textContent = summary.total ?? items.length;
-  qs("#rAktif").textContent = summary.aktif ?? fallback.aktif;
-  qs("#rMyipoYes").textContent = summary.myipoYes ?? fallback.myipoYes;
-  qs("#rMyipoNo").textContent = summary.myipoNo ?? fallback.myipoNo;
+  qs("#rYear").textContent = r.year;
+  qs("#rTotal").textContent = r.summary.total;
+  qs("#rAktif").textContent = r.summary.aktif;
+  qs("#rMyipoYes").textContent = r.summary.myipoYes;
+  qs("#rMyipoNo").textContent = r.summary.myipoNo;
 
   const tb = qs("#reportBody");
   tb.innerHTML = "";
-
-  if (!items.length) {
-    tb.innerHTML = `<tr><td colspan="4" class="muted">Tiada rekod untuk tahun ${escapeHtml(r.year || year)}.</td></tr>`;
+  if (!r.items.length) {
+    tb.innerHTML = `<tr><td colspan="4" class="muted">Tiada rekod untuk tahun ${escapeHtml(r.year)}.</td></tr>`;
     return;
   }
-
-  for (const it of items) {
-    const myipo = `${it.myipoStatus || ""} / ${it.myipoNumber || ""}`.trim();
+  for (const it of r.items) {
     tb.innerHTML += `
       <tr>
         <td>${escapeHtml(it.tajuk||"")}</td>
         <td>${escapeHtml(it.kategori||"")}</td>
         <td>${escapeHtml(it.status||"")}</td>
-        <td>${escapeHtml(myipo)}</td>
+        <td>${escapeHtml(it.myipo||"")}</td>
       </tr>
     `;
   }
 }
 
 function doPrint() { window.print(); }
-
-function doLogout() {
-  clearToken();
-  location.href = "./index.html";
-}
+function doLogout(){ clearToken(); location.href = "./index.html"; }
 
 // ===== Add Innovation =====
 async function addInnovationInit() {
@@ -227,12 +164,10 @@ async function submitInnovation(e) {
 
   qs("#saveMsg").textContent = "Saving…";
   const r = await apiPost("addInnovation", { token }, payload);
-
   if (!r.ok) {
     qs("#saveMsg").textContent = "Gagal: " + (r.error || "");
     return;
   }
-
   qs("#saveMsg").textContent = "Berjaya simpan ✅";
   setTimeout(()=> location.href="./dashboard.html", 600);
 }
