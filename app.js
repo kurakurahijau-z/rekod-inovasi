@@ -1,84 +1,253 @@
-<!doctype html>
-<html lang="ms">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tambah Inovasi</title>
-  <script src="config.js"></script>
-  <script src="app.js"></script>
-  <style>
-    :root{ --line:#e5e7eb; --muted:#64748b; --bg:#f8fafc; --text:#0f172a; }
-    body{ margin:0; font-family: ui-sans-serif,system-ui,-apple-system; background:var(--bg); color:var(--text); }
-    .wrap{ max-width:720px; margin:24px auto; padding:0 18px; }
-    .card{ background:white; border:1px solid var(--line); border-radius:18px; padding:18px; }
-    label{ font-size:13px; color:#334155; font-weight:700; display:block; margin-top:10px; }
-    input,select{
-      width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:12px; margin-top:6px;
-      font-size:14px; background:white;
-    }
-    .row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    .btn{ margin-top:14px; padding:10px 14px; border-radius:12px; border:1px solid var(--line); background:#0f172a; color:white; font-weight:800; cursor:pointer; }
-    .muted{ color:var(--muted); font-size:13px; }
-    .top{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;}
-  </style>
-</head>
-<body onload="addInnovationInit()">
-  <div class="wrap">
-    <div class="top">
-      <div class="muted">Login: <b id="meEmail">-</b></div>
-      <button class="btn" style="background:white;color:#0f172a;" onclick="location.href='./dashboard.html'">← Dashboard</button>
-    </div>
+// app.js
+const cfg = window.APP_CONFIG;
 
-    <div class="card">
-      <h2 style="margin:0 0 4px;">Tambah Inovasi</h2>
-      <div class="muted">Isi asas dulu. Nanti kita polish kosmetik lepas siap.</div>
+function qs(sel){ return document.querySelector(sel); }
 
-      <form onsubmit="submitInnovation(event)">
-        <label>Tajuk</label>
-        <input id="tajuk" required />
+function setToken(token){ localStorage.setItem("token", token); }
+function getToken(){ return localStorage.getItem("token") || ""; }
+function clearToken(){
+  localStorage.removeItem("token");
+  localStorage.removeItem("email");
+  localStorage.removeItem("role");
+}
 
-        <div class="row">
-          <div>
-            <label>Tahun</label>
-            <input id="tahun" value="2026" required />
-          </div>
-          <div>
-            <label>Kategori</label>
-            <select id="kategori" required>
-              <option value="">-- pilih --</option>
-              <option>PRODUK</option>
-              <option>PROSES</option>
-              <option>SISTEM</option>
-              <option>MODUL</option>
-              <option>LAIN-LAIN</option>
-            </select>
-          </div>
-        </div>
+async function apiGet(action, params={}) {
+  const url = new URL(cfg.API_BASE);
+  url.searchParams.set("action", action);
+  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+  const r = await fetch(url.toString(), { method:"GET" });
+  return r.json();
+}
 
-        <div class="row">
-          <div>
-            <label>Status</label>
-            <select id="status" required>
-              <option>aktif</option>
-              <option>tidak aktif</option>
-            </select>
-          </div>
-          <div>
-            <label>MyIPO Status</label>
-            <select id="myipoStatus" required>
-              <option value="yes">yes</option>
-              <option value="no">no</option>
-            </select>
-          </div>
-        </div>
+/**
+ * IMPORTANT: CORS-safe POST for GitHub Pages -> Apps Script
+ * - DON'T use application/json (will trigger preflight OPTIONS)
+ * - Use text/plain so request stays "simple" (no preflight)
+ */
+async function apiPost(action, params={}, body={}) {
+  const url = new URL(cfg.API_BASE);
+  url.searchParams.set("action", action);
+  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
 
-        <label>MyIPO Number (jika ada)</label>
-        <input id="myipoNumber" placeholder="contoh: LYC223456789" />
+  const r = await fetch(url.toString(), {
+    method:"POST",
+    headers:{ "Content-Type":"text/plain;charset=utf-8" },
+    body: JSON.stringify(body)
+  });
 
-        <button class="btn" type="submit">Simpan</button>
-        <div id="saveMsg" class="muted" style="margin-top:10px;"></div>
-      </form>
-    </div>
-  </div>
-</body>
-</html>
+  const t = await r.text();
+  try { return JSON.parse(t); }
+  catch { return { ok:false, error:"Invalid JSON from server", raw:t }; }
+}
+
+function requireAuthOrRedirect() {
+  const token = getToken();
+  if (!token) location.href = "./index.html";
+}
+
+async function loadMe() {
+  const token = getToken();
+  const r = await apiGet("me", { token });
+  if (!r.ok) { clearToken(); location.href="./index.html"; return null; }
+  localStorage.setItem("email", r.email);
+  localStorage.setItem("role", r.role);
+  return r;
+}
+
+// ===== Google Sign-In callback =====
+async function onGoogleCredentialResponse(resp) {
+  try {
+    const st = qs("#loginStatus");
+    if (st) st.textContent = "Signing in…";
+
+    // Keep current working flow: POST text/plain (CORS-safe)
+    const r = await apiPost("loginGoogle", {}, { credential: resp.credential });
+    if (!r.ok) throw new Error(r.error || "Login failed");
+
+    setToken(r.token);
+    localStorage.setItem("email", r.email);
+    localStorage.setItem("role", r.role);
+
+    location.href = "./dashboard.html";
+  } catch (e) {
+    const st = qs("#loginStatus");
+    if (st) st.textContent = "Login failed: " + e.message;
+  }
+}
+
+// ===== Dashboard =====
+async function dashboardInit() {
+  requireAuthOrRedirect();
+  const me = await loadMe();
+  if (!me) return;
+
+  const elEmail = qs("#meEmail");
+  const elRole  = qs("#meRole");
+  if (elEmail) elEmail.textContent = me.email;
+  if (elRole)  elRole.textContent  = me.role;
+
+  await refreshMyInnovations();
+  await refreshReport("2026");
+}
+
+function norm_(v){
+  return String(v ?? "")
+    .toLowerCase()
+    .replace(/\u200B/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function refreshMyInnovations() {
+  const token = getToken();
+  const r = await apiGet("listMyInnovations", { token });
+
+  const body = qs("#myListBody");
+  if (body) body.innerHTML = "";
+
+  const items = (r.ok ? (r.items || []) : []);
+
+  // ===== Cards =====
+  const years = new Set();
+  let aktifCount = 0;
+  let myipoYesCount = 0;
+
+  for (const it of items) {
+    const y = String(it.tahun || "").trim();
+    if (y) years.add(y);
+
+    const st = norm_(it.status);
+    if (st === "aktif" || st.includes("aktif")) aktifCount++;
+
+    const ms = norm_(it.myipoStatus);
+    if (ms === "yes" || ms === "y" || ms === "ya" || ms.includes("yes")) myipoYesCount++;
+  }
+
+  const elTotal = qs("#countTotal");
+  const elYears = qs("#countYears");
+  const elAktif = qs("#countAktif");
+  const elMyipo = qs("#countMyipoYes");
+
+  if (elTotal) elTotal.textContent = items.length;
+  if (elYears) elYears.textContent = years.size;
+  if (elAktif) elAktif.textContent = aktifCount;
+  if (elMyipo) elMyipo.textContent = myipoYesCount;
+
+  if (!body) return;
+
+  if (!items.length) {
+    body.innerHTML = `<tr><td colspan="6" class="muted">Belum ada rekod inovasi.</td></tr>`;
+    return;
+  }
+
+  for (const it of items) {
+    const myipo = `${it.myipoStatus || ""} / ${it.myipoNumber || ""}`.trim();
+    const pillCls = (norm_(it.status) === "aktif" || norm_(it.status).includes("aktif")) ? "ok" : "warn";
+
+    body.innerHTML += `
+      <tr>
+        <td>${escapeHtml(it.tajuk || "")}</td>
+        <td>${escapeHtml(it.tahun || "")}</td>
+        <td>${escapeHtml(it.kategori || "")}</td>
+        <td><span class="pill ${pillCls}">${escapeHtml(it.status||"")}</span></td>
+        <td>${escapeHtml(myipo)}</td>
+        <td><code>${escapeHtml(it.innovationId||"")}</code></td>
+      </tr>
+    `;
+  }
+}
+
+async function refreshReport(year) {
+  const token = getToken();
+  const r = await apiGet("generateReport", { token, year });
+  if (!r.ok) return;
+
+  // ✅ guna summary dari backend (yang dah normalize betul)
+  const s = r.summary || { total:0, aktif:0, myipoYes:0, myipoNo:0 };
+
+  const elYear = qs("#rYear");
+  const elTotal = qs("#rTotal");
+  const elAktif = qs("#rAktif");
+  const elYes = qs("#rMyipoYes");
+  const elNo = qs("#rMyipoNo");
+
+  if (elYear)  elYear.textContent  = String(r.year || year);
+  if (elTotal) elTotal.textContent = String(s.total ?? 0);
+  if (elAktif) elAktif.textContent = String(s.aktif ?? 0);
+  if (elYes)   elYes.textContent   = String(s.myipoYes ?? 0);
+  if (elNo)    elNo.textContent    = String(s.myipoNo ?? 0);
+
+  const items = (r.items || []);
+  const tb = qs("#reportBody");
+  if (!tb) return;
+
+  tb.innerHTML = "";
+  if (!items.length) {
+    tb.innerHTML = `<tr><td colspan="4" class="muted">Tiada rekod untuk tahun ${escapeHtml(String(r.year || year))}.</td></tr>`;
+    return;
+  }
+
+  for (const it of items) {
+    const myipo = it.myipo
+      ? String(it.myipo)
+      : `${it.myipoStatus || ""} / ${it.myipoNumber || ""}`.trim();
+
+    tb.innerHTML += `
+      <tr>
+        <td>${escapeHtml(it.tajuk||"")}</td>
+        <td>${escapeHtml(it.kategori||"")}</td>
+        <td>${escapeHtml(it.status||"")}</td>
+        <td>${escapeHtml(myipo||"")}</td>
+      </tr>
+    `;
+  }
+}
+
+function doPrint() { window.print(); }
+
+function doLogout() {
+  clearToken();
+  location.href = "./index.html";
+}
+
+// ===== Add Innovation =====
+async function addInnovationInit() {
+  requireAuthOrRedirect();
+  const me = await loadMe();
+  if (!me) return;
+  const elEmail = qs("#meEmail");
+  if (elEmail) elEmail.textContent = me.email;
+}
+
+async function submitInnovation(e) {
+  e.preventDefault();
+  const token = getToken();
+
+  const payload = {
+    tajuk: qs("#tajuk").value.trim(),
+    tahun: qs("#tahun").value.trim(),
+    kategori: qs("#kategori").value.trim(),
+    status: qs("#status").value.trim(),
+    myipoStatus: qs("#myipoStatus").value.trim(),
+    myipoNumber: qs("#myipoNumber").value.trim()
+  };
+
+  const msg = qs("#saveMsg");
+  if (msg) msg.textContent = "Saving…";
+
+  const r = await apiPost("addInnovation", { token }, payload);
+  if (!r.ok) {
+    if (msg) msg.textContent = "Gagal: " + (r.error || "");
+    return;
+  }
+
+  if (msg) msg.textContent = "Berjaya simpan ✅";
+  setTimeout(()=> location.href="./dashboard.html", 600);
+}
+
+// ===== util =====
+function escapeHtml(s){
+  return String(s||"").replace(/[&<>"']/g, m => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[m]));
+}
