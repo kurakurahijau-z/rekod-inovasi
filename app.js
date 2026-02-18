@@ -1,260 +1,379 @@
-// ---------- Storage helpers ----------
-function setSession(email, role, token) {
-  localStorage.setItem(window.APP_CONFIG.STORAGE_EMAIL, email);
-  localStorage.setItem(window.APP_CONFIG.STORAGE_ROLE, role || "user");
-  localStorage.setItem(window.APP_CONFIG.STORAGE_TOKEN, token);
-}
+/* app.js - Rekod Inovasi Jabatan (Corporate minimal + soft pastel) */
 
+const C = window.APP_CONFIG;
+
+function $(q, root=document){ return root.querySelector(q); }
+function $all(q, root=document){ return [...root.querySelectorAll(q)]; }
+
+function setSession({ email, token, role }) {
+  localStorage.setItem(C.STORAGE_EMAIL, email || "");
+  localStorage.setItem(C.STORAGE_TOKEN, token || "");
+  localStorage.setItem(C.STORAGE_ROLE, role || "user");
+}
 function clearSession() {
-  localStorage.removeItem(window.APP_CONFIG.STORAGE_EMAIL);
-  localStorage.removeItem(window.APP_CONFIG.STORAGE_ROLE);
-  localStorage.removeItem(window.APP_CONFIG.STORAGE_TOKEN);
+  localStorage.removeItem(C.STORAGE_EMAIL);
+  localStorage.removeItem(C.STORAGE_TOKEN);
+  localStorage.removeItem(C.STORAGE_ROLE);
+}
+function getEmail(){ return localStorage.getItem(C.STORAGE_EMAIL) || ""; }
+function getToken(){ return localStorage.getItem(C.STORAGE_TOKEN) || ""; }
+function getRole(){ return localStorage.getItem(C.STORAGE_ROLE) || "user"; }
+
+function decodeJwt(jwt) {
+  try {
+    const part = jwt.split(".")[1];
+    const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(decodeURIComponent([...json].map(c => "%" + c.charCodeAt(0).toString(16).padStart(2,"0")).join("")));
+  } catch (e) { return null; }
 }
 
-function getToken() {
-  return localStorage.getItem(window.APP_CONFIG.STORAGE_TOKEN) || "";
-}
-function getEmail() {
-  return localStorage.getItem(window.APP_CONFIG.STORAGE_EMAIL) || "";
-}
-function getRole() {
-  return localStorage.getItem(window.APP_CONFIG.STORAGE_ROLE) || "user";
-}
-
-// ---------- API ----------
 async function apiGet(params) {
-  const url = new URL(window.APP_CONFIG.BASE_URL);
-  Object.entries(params || {}).forEach(([k, v]) => url.searchParams.set(k, v));
+  const url = new URL(C.BASE_URL);
+  Object.entries(params || {}).forEach(([k,v]) => url.searchParams.set(k, v));
   const r = await fetch(url.toString(), { method: "GET" });
-  return r.json();
+  return await r.json();
 }
 
-async function apiPost(action, body) {
-  const url = new URL(window.APP_CONFIG.BASE_URL);
-  url.searchParams.set("action", action);
+async function apiPost(params, bodyObj={}) {
+  const url = new URL(C.BASE_URL);
+  Object.entries(params || {}).forEach(([k,v]) => url.searchParams.set(k, v));
   const r = await fetch(url.toString(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body || {})
+    body: JSON.stringify(bodyObj),
   });
-  return r.json();
+  return await r.json();
 }
 
-// ---------- UI utilities ----------
-function qs(sel) { return document.querySelector(sel); }
-
+// ---------- UI helpers ----------
 function toast(msg, type="info") {
-  const el = qs("#toast");
-  if (!el) { alert(msg); return; }
-  el.classList.remove("hidden");
-  el.dataset.type = type;
-  el.querySelector("[data-toast-text]").textContent = msg;
-
-  el.classList.remove("border-red-200","bg-red-50","text-red-800","border-emerald-200","bg-emerald-50","text-emerald-800","border-slate-200","bg-white","text-slate-800");
-  if (type === "error") el.classList.add("border-red-200","bg-red-50","text-red-800");
-  else if (type === "success") el.classList.add("border-emerald-200","bg-emerald-50","text-emerald-800");
-  else el.classList.add("border-slate-200","bg-white","text-slate-800");
-
-  clearTimeout(window.__toastT);
-  window.__toastT = setTimeout(() => el.classList.add("hidden"), 2500);
+  const box = $("#toast");
+  if (!box) { alert(msg); return; }
+  box.className = "fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-sm transition opacity-100";
+  box.classList.add(type === "error" ? "bg-rose-50 text-rose-700 border border-rose-200"
+                  : type === "success" ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                  : "bg-slate-50 text-slate-700 border border-slate-200");
+  box.textContent = msg;
+  box.style.opacity = "1";
+  setTimeout(() => { box.style.opacity = "0"; }, 2200);
 }
 
-function requireAuthOrRedirect() {
-  if (!getToken() || !getEmail()) {
+function requireAuth() {
+  const t = getToken();
+  const e = getEmail();
+  if (!t || !e) {
     location.href = "./index.html";
     return false;
   }
   return true;
 }
 
-function prettyJSON(obj) {
-  return JSON.stringify(obj, null, 2);
-}
-
-// ---------- Theme (corporate + soft pastel) ----------
-function applyThemeBase() {
-  document.documentElement.classList.add("bg-[#fbfbfe]");
-}
-
-// ---------- Dashboard rendering ----------
-function badgeStatus(status) {
-  const s = (status || "").toLowerCase();
-  if (s === "aktif") return `<span class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-xs">aktif</span>`;
-  if (s === "arkib") return `<span class="inline-flex items-center rounded-full bg-slate-50 text-slate-700 border border-slate-200 px-2 py-0.5 text-xs">arkib</span>`;
-  return `<span class="inline-flex items-center rounded-full bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 text-xs">${status || "—"}</span>`;
-}
-
-function badgeMyipo(myipoStatus, myipoNumber) {
-  const v = (myipoStatus || "").toLowerCase();
-  if (v === "yes") {
-    return `<span class="inline-flex items-center rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 text-xs">yes / ${escapeHtml_(myipoNumber || "")}</span>`;
-  }
-  return `<span class="inline-flex items-center rounded-full bg-slate-50 text-slate-700 border border-slate-200 px-2 py-0.5 text-xs">no</span>`;
-}
-
-function escapeHtml_(s) {
-  return String(s || "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-async function loadInnovationsAndRender() {
+function setTopBar() {
   const email = getEmail();
   const role = getRole();
-  const token = getToken();
+  const elEmail = $("#topEmail");
+  const elRole = $("#topRole");
+  if (elEmail) elEmail.textContent = email || "-";
+  if (elRole) elRole.textContent = role || "user";
+}
 
-  qs("[data-email]").textContent = email;
-  qs("[data-role]").textContent = role;
+function safeText(s){ return (s ?? "").toString(); }
+function esc(s){ return safeText(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
-  // skeleton
-  qs("#tableBody").innerHTML = `<tr><td colspan="6" class="py-6 text-sm text-slate-500">Loading…</td></tr>`;
-  qs("#debugJson").textContent = "";
+// ---------- Google OAuth (GIS) ----------
+function initGoogleLogin() {
+  const btn = $("#googleBtn");
+  const status = $("#loginStatus");
+  if (!btn) return;
 
-  const res = await apiGet({ action: "listMyInnovations", token });
-  if (!res.ok) {
-    toast(res.error || "Gagal load data", "error");
+  // Load GIS
+  if (!window.google || !google.accounts || !google.accounts.id) {
+    status && (status.textContent = "Loading Google sign-in...");
     return;
   }
 
-  const data = res.data || [];
-  renderKpis_(data);
-  renderTable_(data);
-  qs("#debugJson").textContent = prettyJSON(res);
+  google.accounts.id.initialize({
+    client_id: C.CLIENT_ID,
+    callback: async (resp) => {
+      try {
+        status && (status.textContent = "Signing in...");
+        const payload = decodeJwt(resp.credential);
+        const email = payload?.email || "";
+        if (!email) throw new Error("Tak dapat email dari Google.");
 
-  toast("Data siap dimuat", "success");
+        // domain gate
+        if (!email.toLowerCase().endsWith("@" + C.ALLOWED_DOMAIN)) {
+          throw new Error(`Akaun mesti @${C.ALLOWED_DOMAIN}`);
+        }
+
+        // Call backend login
+        // Backend kau sekarang nampak guna action=login dan semak Users sheet.
+        // Kita hantar email + idToken (backend boleh ignore / guna kemudian).
+        const r = await apiGet({ action: "login", email, idToken: resp.credential });
+
+        if (!r?.ok) throw new Error(r?.error || "Login gagal.");
+
+        setSession({ email, token: r.token, role: r.role || "user" });
+        status && (status.textContent = "OK. Redirect...");
+        location.href = "./dashboard.html";
+      } catch (e) {
+        console.error(e);
+        status && (status.textContent = "Login failed.");
+        toast(e.message || "Login gagal.", "error");
+      }
+    }
+  });
+
+  // Render button (corporate minimal)
+  btn.innerHTML = "";
+  google.accounts.id.renderButton(btn, {
+    theme: "outline",
+    size: "large",
+    shape: "pill",
+    width: 280
+  });
+
+  status && (status.textContent = "Sila login guna akaun rasmi.");
 }
 
-function renderKpis_(data) {
-  const total = data.length;
-  const years = new Set(data.map(x => x.tahun)).size;
-  const aktif = data.filter(x => String(x.status || "").toLowerCase() === "aktif").length;
-  const myipoYes = data.filter(x => String(x.myipoStatus || "").toLowerCase() === "yes").length;
-
-  qs("[data-kpi-total]").textContent = total;
-  qs("[data-kpi-years]").textContent = years;
-  qs("[data-kpi-aktif]").textContent = aktif;
-  qs("[data-kpi-myipo]").textContent = myipoYes;
+// ---------- Dashboard ----------
+function calcStats(items) {
+  const total = items.length;
+  const years = new Set(items.map(x => x.tahun).filter(Boolean));
+  const aktif = items.filter(x => (x.status || "").toLowerCase() === "aktif").length;
+  const myipoYes = items.filter(x => (x.myipoStatus || "").toLowerCase() === "yes").length;
+  return { total, years: years.size, aktif, myipoYes };
 }
 
-function renderTable_(data) {
-  if (!data.length) {
-    qs("#tableBody").innerHTML = `
-      <tr>
-        <td colspan="6" class="py-10">
-          <div class="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center">
-            <div class="text-base font-semibold text-slate-800">Belum ada rekod inovasi</div>
-            <div class="mt-1 text-sm text-slate-500">Klik “Tambah Inovasi” untuk mula isi.</div>
-          </div>
+function badgeStatus(status) {
+  const s = (status || "").toLowerCase();
+  if (s === "aktif") return `<span class="px-2 py-1 text-xs rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">aktif</span>`;
+  if (s === "arkib") return `<span class="px-2 py-1 text-xs rounded-full bg-slate-50 text-slate-700 border border-slate-200">arkib</span>`;
+  return `<span class="px-2 py-1 text-xs rounded-full bg-amber-50 text-amber-700 border border-amber-200">${esc(status || "pending")}</span>`;
+}
+
+function renderTable(items) {
+  const tbody = $("#tblBody");
+  if (!tbody) return;
+
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-slate-500">
+      Belum ada rekod inovasi. Klik <b>+ Tambah Inovasi</b> untuk mula.
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = items.map(it => {
+    const id = esc(it.innovationId || "");
+    const tajuk = esc(it.tajuk || "-");
+    const tahun = esc(it.tahun || "-");
+    const kategori = esc(it.kategori || "-");
+    const status = badgeStatus(it.status || "-");
+    const myipo = esc((it.myipoStatus || "-") + (it.myipoNumber ? " / " + it.myipoNumber : ""));
+    return `
+      <tr class="border-t hover:bg-slate-50/60 transition">
+        <td class="py-3 px-4 font-medium text-slate-800">${tajuk}</td>
+        <td class="py-3 px-4 text-slate-700">${tahun}</td>
+        <td class="py-3 px-4 text-slate-700">${kategori}</td>
+        <td class="py-3 px-4">${status}</td>
+        <td class="py-3 px-4 text-slate-700">${myipo}</td>
+        <td class="py-3 px-4">
+          <span class="inline-flex items-center gap-2">
+            <span class="px-2 py-1 text-xs rounded-lg bg-slate-50 border border-slate-200 text-slate-700">${id.slice(0,10)}…</span>
+            <button class="text-xs text-indigo-600 hover:underline" data-copy="${id}">Copy</button>
+          </span>
         </td>
       </tr>
     `;
-    return;
-  }
+  }).join("");
 
-  qs("#tableBody").innerHTML = data.map(x => `
-    <tr class="hover:bg-indigo-50/30">
-      <td class="px-4 py-3 font-medium text-slate-800">${escapeHtml_(x.tajuk)}</td>
-      <td class="px-4 py-3 text-slate-700">${x.tahun || ""}</td>
-      <td class="px-4 py-3 text-slate-700">${escapeHtml_(x.kategori)}</td>
-      <td class="px-4 py-3">${badgeStatus(x.status)}</td>
-      <td class="px-4 py-3">${badgeMyipo(x.myipoStatus, x.myipoNumber)}</td>
-      <td class="px-4 py-3">
-        <div class="flex items-center gap-2">
-          <span class="inline-flex rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">${escapeHtml_(x.innovationId.slice(0,10))}…</span>
-          <button class="text-xs text-indigo-700 hover:underline" onclick="copyText('${escapeHtml_(x.innovationId)}')">Copy</button>
+  $all("[data-copy]").forEach(b => {
+    b.addEventListener("click", async () => {
+      const v = b.getAttribute("data-copy") || "";
+      await navigator.clipboard.writeText(v);
+      toast("ID disalin.", "success");
+    });
+  });
+}
+
+async function loadDashboard() {
+  if (!requireAuth()) return;
+  setTopBar();
+
+  const out = $("#debugJson");
+  const btnList = $("#btnList");
+  const btnRefresh = $("#btnRefresh");
+  const btnPrint = $("#btnPrint");
+  const btnAdd = $("#btnAdd");
+  const btnLogout = $("#btnLogout");
+  const yearSelect = $("#reportYear");
+
+  btnLogout?.addEventListener("click", () => { clearSession(); location.href="./index.html"; });
+  btnAdd?.addEventListener("click", () => location.href="./add-innovation.html");
+
+  const fetchList = async () => {
+    $("#loadingBar")?.classList.remove("hidden");
+    try {
+      const r = await apiGet({ action: "listMyInnovations", appToken: getToken() });
+      if (!r?.ok) throw new Error(r?.error || "Tak boleh load inovasi.");
+
+      const items = r.data || [];
+      const stats = calcStats(items);
+
+      $("#statTotal").textContent = stats.total;
+      $("#statYears").textContent = stats.years;
+      $("#statAktif").textContent = stats.aktif;
+      $("#statMyipo").textContent = stats.myipoYes;
+
+      renderTable(items);
+
+      if (out) out.textContent = JSON.stringify(r, null, 2);
+
+      // Report
+      const year = parseInt(yearSelect?.value || "2026", 10);
+      renderReport(items, year);
+
+      return items;
+    } finally {
+      $("#loadingBar")?.classList.add("hidden");
+    }
+  };
+
+  let cached = await fetchList();
+
+  btnList?.addEventListener("click", async () => { cached = await fetchList(); toast("Senarai dikemaskini.", "success"); });
+  btnRefresh?.addEventListener("click", async () => { cached = await fetchList(); toast("Refresh OK.", "success"); });
+
+  yearSelect?.addEventListener("change", () => {
+    const y = parseInt(yearSelect.value || "2026", 10);
+    renderReport(cached || [], y);
+  });
+
+  btnPrint?.addEventListener("click", () => {
+    // print only report section
+    window.print();
+  });
+}
+
+function renderReport(items, year=2026) {
+  const el = $("#reportArea");
+  if (!el) return;
+
+  const list = (items || []).filter(x => parseInt(x.tahun || 0, 10) === year);
+
+  const total = list.length;
+  const aktif = list.filter(x => (x.status || "").toLowerCase() === "aktif").length;
+  const myipoYes = list.filter(x => (x.myipoStatus || "").toLowerCase() === "yes").length;
+  const myipoNo = total - myipoYes;
+
+  const rows = list.length
+    ? list.map(x => `
+      <tr class="border-t">
+        <td class="py-2 px-3 font-medium">${esc(x.tajuk||"-")}</td>
+        <td class="py-2 px-3">${esc(x.kategori||"-")}</td>
+        <td class="py-2 px-3">${badgeStatus(x.status||"-")}</td>
+        <td class="py-2 px-3">${esc((x.myipoStatus||"-") + (x.myipoNumber ? " / "+x.myipoNumber : ""))}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="4" class="p-4 text-slate-500">Tiada rekod untuk tahun ${year}.</td></tr>`;
+
+  const now = new Date();
+  const printedAt = now.toLocaleString("ms-MY");
+
+  el.innerHTML = `
+    <div class="printable rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Report Inovasi ${year}</h2>
+          <p class="text-sm text-slate-500">Ringkasan berdasarkan rekod yang didaftarkan oleh pengguna ini.</p>
         </div>
-      </td>
-    </tr>
-  `).join("");
-}
-
-function copyText(text) {
-  navigator.clipboard.writeText(text).then(() => toast("ID copied", "success")).catch(() => toast("Tak boleh copy", "error"));
-}
-
-// ---------- Report / Print ----------
-async function generateReport2026() {
-  const token = getToken();
-  const res = await apiGet({ action: "report2026", token });
-  if (!res.ok) return toast(res.error || "Report gagal", "error");
-
-  const el = qs("#reportArea");
-  el.classList.remove("hidden");
-  el.innerHTML = buildReportHtml_(res);
-
-  // auto open print dialog (user-friendly)
-  setTimeout(() => window.print(), 250);
-}
-
-function buildReportHtml_(r) {
-  const s = r.summary || {};
-  const items = r.items || [];
-  const now = new Date().toLocaleString("ms-MY");
-
-  const rows = items.length ? items.map(it => `
-    <tr>
-      <td class="py-2 pr-4">${escapeHtml_(it.tajuk)}</td>
-      <td class="py-2 pr-4">${escapeHtml_(it.kategori)}</td>
-      <td class="py-2 pr-4">${escapeHtml_(it.status)}</td>
-      <td class="py-2 pr-4">${escapeHtml_(it.myipo)}</td>
-    </tr>
-  `).join("") : `<tr><td class="py-3 text-slate-500" colspan="4">Tiada rekod tahun 2026.</td></tr>`;
-
-  return `
-  <div class="mx-auto max-w-[900px] rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-    <div class="flex items-start justify-between gap-6">
-      <div>
-        <div class="text-xl font-bold text-slate-900">Pencapaian Inovasi Jabatan ${r.year}</div>
-        <div class="mt-1 text-sm text-slate-500">Ringkasan penyertaan & status inovasi (berdasarkan rekod dalam sistem)</div>
+        <div class="text-right text-xs text-slate-500">
+          Dicetak: ${esc(printedAt)}
+        </div>
       </div>
-      <div class="text-right text-xs text-slate-500">
-        <div>${escapeHtml_(r.email)}</div>
-        <div>Dicetak: ${escapeHtml_(now)}</div>
+
+      <div class="mt-5 grid grid-cols-1 md:grid-cols-4 gap-3">
+        ${kpiCard("Jumlah Inovasi", total)}
+        ${kpiCard("Status Aktif", aktif)}
+        ${kpiCard("MyIPO Yes", myipoYes)}
+        ${kpiCard("MyIPO No", myipoNo)}
       </div>
-    </div>
 
-    <div class="mt-6 grid grid-cols-4 gap-3">
-      ${reportCard_("Jumlah Inovasi (2026)", s.total)}
-      ${reportCard_("Status Aktif", s.aktif)}
-      ${reportCard_("MyIPO Yes", s.myipoYes)}
-      ${reportCard_("MyIPO No", s.myipoNo)}
-    </div>
-
-    <div class="mt-7">
-      <div class="text-sm font-semibold text-slate-800">Senarai Inovasi (2026)</div>
-      <div class="mt-2 overflow-hidden rounded-xl border border-slate-200">
+      <div class="mt-6 overflow-hidden rounded-xl border border-slate-200">
         <table class="w-full text-sm">
           <thead class="bg-slate-50 text-slate-600">
             <tr>
-              <th class="py-2 px-4 text-left font-medium">Tajuk</th>
-              <th class="py-2 px-4 text-left font-medium">Kategori</th>
-              <th class="py-2 px-4 text-left font-medium">Status</th>
-              <th class="py-2 px-4 text-left font-medium">MyIPO</th>
+              <th class="text-left py-2 px-3">Tajuk</th>
+              <th class="text-left py-2 px-3">Kategori</th>
+              <th class="text-left py-2 px-3">Status</th>
+              <th class="text-left py-2 px-3">MyIPO</th>
             </tr>
           </thead>
-          <tbody class="px-4">
-            ${rows.replaceAll("<td", "<td class=\"px-4\"")}
-          </tbody>
+          <tbody>${rows}</tbody>
         </table>
       </div>
-      <div class="mt-4 text-xs text-slate-500">
-        Nota: Report ini memaparkan inovasi tahun 2026 berdasarkan rekod yang didaftarkan oleh ahli kumpulan / ketua kumpulan.
-      </div>
-    </div>
 
-    <div class="mt-8 text-xs text-slate-400">© 2026 kurakurahijau.com</div>
-  </div>
+      <p class="mt-4 text-xs text-slate-500">
+        Nota: Report ini memaparkan inovasi tahun ${year} berdasarkan rekod yang didaftarkan oleh ahli kumpulan / ketua kumpulan.
+      </p>
+    </div>
   `;
 }
 
-function reportCard_(label, value) {
+function kpiCard(label, value) {
   return `
-    <div class="rounded-2xl border border-slate-200 bg-[#fbfbfe] p-4">
-      <div class="text-xs text-slate-500">${escapeHtml_(label)}</div>
-      <div class="mt-1 text-2xl font-bold text-slate-900">${Number(value || 0)}</div>
+    <div class="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-4">
+      <div class="text-xs text-slate-500">${esc(label)}</div>
+      <div class="text-2xl font-extrabold text-slate-900 mt-1">${esc(value)}</div>
     </div>
   `;
 }
+
+// ---------- Add Innovation ----------
+async function initAddInnovation() {
+  if (!requireAuth()) return;
+  setTopBar();
+
+  $("#btnLogout")?.addEventListener("click", () => { clearSession(); location.href="./index.html"; });
+  $("#btnBack")?.addEventListener("click", () => location.href="./dashboard.html");
+
+  const f = $("#formAdd");
+  f?.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+
+    const payload = {
+      tajuk: $("#tajuk").value.trim(),
+      tahun: parseInt($("#tahun").value || "2026", 10),
+      kategori: $("#kategori").value,
+      status: $("#status").value,
+      myipoStatus: $("#myipoStatus").value,
+      myipoNumber: $("#myipoNumber").value.trim(),
+    };
+
+    if (!payload.tajuk) return toast("Tajuk wajib isi.", "error");
+
+    $("#btnSubmit").disabled = true;
+    try {
+      // IMPORTANT: action name mungkin backend kau = createInnovation / addInnovation.
+      // Aku letak createInnovation. Kalau backend kau guna nama lain,
+      // tukar DI SINI sahaja.
+      const r = await apiPost({ action: "createInnovation", appToken: getToken() }, payload);
+      if (!r?.ok) throw new Error(r?.error || "Gagal simpan.");
+
+      toast("Rekod inovasi disimpan.", "success");
+      setTimeout(() => location.href="./dashboard.html", 600);
+    } catch (e) {
+      console.error(e);
+      toast(e.message || "Error simpan.", "error");
+    } finally {
+      $("#btnSubmit").disabled = false;
+    }
+  });
+}
+
+// ---------- Page bootstrap ----------
+window.addEventListener("DOMContentLoaded", () => {
+  const page = document.body.getAttribute("data-page");
+  if (page === "login") initGoogleLogin();
+  if (page === "dashboard") loadDashboard();
+  if (page === "add") initAddInnovation();
+});
