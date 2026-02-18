@@ -32,6 +32,7 @@
     @media (max-width:900px){ .grid{ grid-template-columns: repeat(2,1fr);} }
   </style>
 </head>
+
 <body onload="dashboardInit()">
   <div class="wrap">
     <div class="topbar">
@@ -47,11 +48,24 @@
       </div>
     </div>
 
+    <!-- KPI (based on LIST MY INNOVATIONS) -->
     <div class="grid">
-      <div class="card"><div class="kpiLabel">Jumlah Inovasi</div><div class="kpiVal" id="countTotal">0</div></div>
-      <div class="card"><div class="kpiLabel">Bil. Tahun Terlibat</div><div class="kpiVal" id="rYear">2026</div></div>
-      <div class="card"><div class="kpiLabel">Status Aktif</div><div class="kpiVal" id="rAktif">0</div></div>
-      <div class="card"><div class="kpiLabel">MyIPO (Yes)</div><div class="kpiVal" id="rMyipoYes">0</div></div>
+      <div class="card">
+        <div class="kpiLabel">Jumlah Inovasi</div>
+        <div class="kpiVal" id="countTotal">0</div>
+      </div>
+      <div class="card">
+        <div class="kpiLabel">Bil. Tahun Terlibat</div>
+        <div class="kpiVal" id="countYears">0</div>
+      </div>
+      <div class="card">
+        <div class="kpiLabel">Status Aktif</div>
+        <div class="kpiVal" id="countAktif">0</div>
+      </div>
+      <div class="card">
+        <div class="kpiLabel">MyIPO (Yes)</div>
+        <div class="kpiVal" id="countMyipoYes">0</div>
+      </div>
     </div>
 
     <h2>Senarai Inovasi Saya</h2>
@@ -66,9 +80,10 @@
       </tbody>
     </table>
 
-    <h2>Report Inovasi <span id="rYear">2026</span></h2>
+    <!-- REPORT section -->
+    <h2>Report Inovasi <span id="reportYearLabel">2026</span></h2>
     <div class="grid" style="grid-template-columns:repeat(4,1fr);">
-      <div class="card"><div class="kpiLabel">Jumlah Inovasi (2026)</div><div class="kpiVal" id="rTotal">0</div></div>
+      <div class="card"><div class="kpiLabel">Jumlah Inovasi (<span id="reportYearSmall">2026</span>)</div><div class="kpiVal" id="rTotal">0</div></div>
       <div class="card"><div class="kpiLabel">Status Aktif</div><div class="kpiVal" id="rAktif">0</div></div>
       <div class="card"><div class="kpiLabel">MyIPO Yes</div><div class="kpiVal" id="rMyipoYes">0</div></div>
       <div class="card"><div class="kpiLabel">MyIPO No</div><div class="kpiVal" id="rMyipoNo">0</div></div>
