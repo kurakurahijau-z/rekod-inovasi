@@ -2,96 +2,83 @@
 <html lang="ms">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tambah Inovasi</title>
-
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="./config.js"></script>
-  <script src="./app.js"></script>
-
+  <script src="config.js"></script>
+  <script src="app.js"></script>
   <style>
-    body { background: radial-gradient(900px 500px at 15% 0%, rgba(99,102,241,0.10), transparent 55%),
-                      radial-gradient(900px 500px at 85% 20%, rgba(16,185,129,0.10), transparent 60%),
-                      #f8fafc; }
+    :root{ --line:#e5e7eb; --muted:#64748b; --bg:#f8fafc; --text:#0f172a; }
+    body{ margin:0; font-family: ui-sans-serif,system-ui,-apple-system; background:var(--bg); color:var(--text); }
+    .wrap{ max-width:720px; margin:24px auto; padding:0 18px; }
+    .card{ background:white; border:1px solid var(--line); border-radius:18px; padding:18px; }
+    label{ font-size:13px; color:#334155; font-weight:700; display:block; margin-top:10px; }
+    input,select{
+      width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:12px; margin-top:6px;
+      font-size:14px; background:white;
+    }
+    .row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .btn{ margin-top:14px; padding:10px 14px; border-radius:12px; border:1px solid var(--line); background:#0f172a; color:white; font-weight:800; cursor:pointer; }
+    .muted{ color:var(--muted); font-size:13px; }
+    .top{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;}
   </style>
 </head>
-
-<body data-page="add" class="min-h-screen p-6">
-  <div id="toast" class="fixed top-4 right-4 opacity-0"></div>
-
-  <div class="max-w-2xl mx-auto">
-    <div class="flex items-center justify-between gap-3">
-      <div>
-        <h1 class="text-2xl font-extrabold text-slate-900">Tambah Inovasi</h1>
-        <div class="text-sm text-slate-600 mt-1">
-          Login: <b id="topEmail">-</b>
-          <span class="ml-2 px-2 py-1 rounded-full text-xs bg-indigo-50 text-indigo-700 border border-indigo-100" id="topRole">user</span>
-        </div>
-      </div>
-
-      <div class="flex gap-2">
-        <button id="btnBack" class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-sm">Back</button>
-        <button id="btnLogout" class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-sm">Logout</button>
-      </div>
+<body onload="addInnovationInit()">
+  <div class="wrap">
+    <div class="top">
+      <div class="muted">Login: <b id="meEmail">-</b></div>
+      <button class="btn" style="background:white;color:#0f172a;" onclick="location.href='./dashboard.html'">← Dashboard</button>
     </div>
 
-    <div class="mt-6 bg-white/90 backdrop-blur rounded-3xl border border-slate-200 shadow-sm p-6">
-      <form id="formAdd" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="md:col-span-2">
-          <label class="text-sm text-slate-700">Tajuk Inovasi</label>
-          <input id="tajuk" class="mt-1 w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="Contoh: Sistem Rekod Inovasi Jabatan" />
+    <div class="card">
+      <h2 style="margin:0 0 4px;">Tambah Inovasi</h2>
+      <div class="muted">Isi asas dulu. Nanti kita polish kosmetik lepas siap.</div>
+
+      <form onsubmit="submitInnovation(event)">
+        <label>Tajuk</label>
+        <input id="tajuk" required />
+
+        <div class="row">
+          <div>
+            <label>Tahun</label>
+            <input id="tahun" value="2026" required />
+          </div>
+          <div>
+            <label>Kategori</label>
+            <select id="kategori" required>
+              <option value="">-- pilih --</option>
+              <option>PRODUK</option>
+              <option>PROSES</option>
+              <option>SISTEM</option>
+              <option>MODUL</option>
+              <option>LAIN-LAIN</option>
+            </select>
+          </div>
         </div>
 
-        <div>
-          <label class="text-sm text-slate-700">Tahun</label>
-          <input id="tahun" type="number" value="2026" class="mt-1 w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+        <div class="row">
+          <div>
+            <label>Status</label>
+            <select id="status" required>
+              <option>aktif</option>
+              <option>tidak aktif</option>
+            </select>
+          </div>
+          <div>
+            <label>MyIPO Status</label>
+            <select id="myipoStatus" required>
+              <option value="yes">yes</option>
+              <option value="no">no</option>
+            </select>
+          </div>
         </div>
 
-        <div>
-          <label class="text-sm text-slate-700">Kategori</label>
-          <select id="kategori" class="mt-1 w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200">
-            <option value="PRODUK">PRODUK</option>
-            <option value="PROSES">PROSES</option>
-            <option value="PERKHIDMATAN">PERKHIDMATAN</option>
-            <option value="PENGAJARAN">PENGAJARAN</option>
-          </select>
-        </div>
+        <label>MyIPO Number (jika ada)</label>
+        <input id="myipoNumber" placeholder="contoh: LYC223456789" />
 
-        <div>
-          <label class="text-sm text-slate-700">Status</label>
-          <select id="status" class="mt-1 w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200">
-            <option value="aktif">aktif</option>
-            <option value="pending">pending</option>
-            <option value="arkib">arkib</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="text-sm text-slate-700">MyIPO Status</label>
-          <select id="myipoStatus" class="mt-1 w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200">
-            <option value="yes">yes</option>
-            <option value="no">no</option>
-          </select>
-        </div>
-
-        <div class="md:col-span-2">
-          <label class="text-sm text-slate-700">MyIPO Number (optional)</label>
-          <input id="myipoNumber" class="mt-1 w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="Contoh: LYC223456789" />
-        </div>
-
-        <div class="md:col-span-2 flex items-center justify-end gap-2 pt-2">
-          <button id="btnSubmit" class="px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm">
-            Simpan Rekod
-          </button>
-        </div>
+        <button class="btn" type="submit">Simpan</button>
+        <div id="saveMsg" class="muted" style="margin-top:10px;"></div>
       </form>
-
-      <div class="mt-4 text-xs text-slate-500">
-        Nota: Kalau error “Unknown action createInnovation”, itu bermaksud backend action name kau lain — nanti aku adjust cepat (1 line je).
-      </div>
     </div>
-
-    <div class="mt-6 text-xs text-slate-400">© 2026 kurakurahijau.com</div>
   </div>
 </body>
 </html>
