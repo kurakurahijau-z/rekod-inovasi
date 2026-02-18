@@ -2,120 +2,133 @@
 <html lang="ms">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Dashboard - Rekod Inovasi</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
 
   <style>
+    body { background: #f8fafc; }
+    /* Print only report area */
     @media print {
-      body * { visibility: hidden; }
-      #reportArea, #reportArea * { visibility: visible; }
-      #reportArea { position: absolute; left: 0; top: 0; width: 100%; }
+      body { background: white; }
+      .no-print { display: none !important; }
+      .print-only { display: block !important; }
+      .printable { border: 0 !important; box-shadow: none !important; }
     }
   </style>
 </head>
 
-<body class="min-h-screen bg-[#fbfbfe] text-slate-800">
-  <div class="mx-auto max-w-6xl px-6 py-10">
+<body data-page="dashboard" class="min-h-screen">
+  <div id="toast" class="fixed top-4 right-4 opacity-0"></div>
+
+  <!-- top loading bar -->
+  <div id="loadingBar" class="hidden fixed top-0 left-0 right-0 h-1 bg-indigo-200">
+    <div class="h-1 w-1/2 bg-indigo-500 animate-pulse"></div>
+  </div>
+
+  <div class="max-w-6xl mx-auto p-6">
     <!-- Header -->
-    <div class="flex items-start justify-between gap-6">
+    <div class="no-print flex flex-col md:flex-row md:items-center md:justify-between gap-4">
       <div>
-        <div class="text-3xl font-extrabold tracking-tight text-slate-900">Dashboard</div>
-        <div class="mt-1 text-sm text-slate-600">
-          Login: <span class="font-semibold" data-email>-</span>
-          <span class="ml-2 inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700" data-role>-</span>
+        <h1 class="text-3xl font-extrabold text-slate-900">Dashboard</h1>
+        <div class="mt-1 text-sm text-slate-600 flex flex-wrap items-center gap-2">
+          <span>Login: <b id="topEmail" class="text-slate-800">-</b></span>
+          <span class="px-2 py-1 rounded-full text-xs bg-indigo-50 text-indigo-700 border border-indigo-100" id="topRole">user</span>
         </div>
       </div>
-      <button id="btnLogout" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-50">
-        Logout
-      </button>
+
+      <div class="flex gap-2">
+        <button id="btnLogout" class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm">
+          Logout
+        </button>
+      </div>
     </div>
 
     <!-- Actions -->
-    <div class="mt-6 flex flex-wrap gap-2">
-      <button id="btnList" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-50">List My Innovations</button>
-      <button id="btnReport" class="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-700 hover:bg-indigo-100">Generate Report 2026</button>
-      <button id="btnPrint" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-50">Print / Save PDF (Report 2026)</button>
-      <a href="./add-innovation.html" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800 hover:bg-emerald-100">+ Tambah Inovasi</a>
+    <div class="no-print mt-6 flex flex-wrap gap-2">
+      <button id="btnList" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm shadow-sm">
+        List My Innovations
+      </button>
+
+      <div class="flex items-center gap-2">
+        <select id="reportYear" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm">
+          <option value="2026">2026</option>
+          <option value="2025">2025</option>
+          <option value="2024">2024</option>
+        </select>
+
+        <button id="btnPrint" class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm">
+          Print / Save PDF (Report)
+        </button>
+      </div>
+
+      <button id="btnAdd" class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm">
+        + Tambah Inovasi
+      </button>
+
+      <button id="btnRefresh" class="px-4 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm">
+        Refresh
+      </button>
     </div>
 
     <!-- KPI -->
-    <div class="mt-6 grid gap-3 md:grid-cols-4">
-      <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div class="no-print mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="rounded-2xl border border-slate-200 bg-white p-5">
         <div class="text-xs text-slate-500">Jumlah Inovasi</div>
-        <div class="mt-1 text-3xl font-bold text-slate-900" data-kpi-total>0</div>
+        <div id="statTotal" class="text-3xl font-extrabold text-slate-900 mt-1">0</div>
       </div>
-      <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="rounded-2xl border border-slate-200 bg-white p-5">
         <div class="text-xs text-slate-500">Bil. Tahun Terlibat</div>
-        <div class="mt-1 text-3xl font-bold text-slate-900" data-kpi-years>0</div>
+        <div id="statYears" class="text-3xl font-extrabold text-slate-900 mt-1">0</div>
       </div>
-      <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="rounded-2xl border border-slate-200 bg-white p-5">
         <div class="text-xs text-slate-500">Status Aktif</div>
-        <div class="mt-1 text-3xl font-bold text-slate-900" data-kpi-aktif>0</div>
+        <div id="statAktif" class="text-3xl font-extrabold text-slate-900 mt-1">0</div>
       </div>
-      <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="rounded-2xl border border-slate-200 bg-white p-5">
         <div class="text-xs text-slate-500">MyIPO (Yes)</div>
-        <div class="mt-1 text-3xl font-bold text-slate-900" data-kpi-myipo>0</div>
+        <div id="statMyipo" class="text-3xl font-extrabold text-slate-900 mt-1">0</div>
       </div>
     </div>
 
     <!-- Table -->
-    <div class="mt-6 rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-        <div class="text-base font-semibold text-slate-900">Senarai Inovasi Saya</div>
-        <div class="text-sm text-slate-500" id="countText">—</div>
+    <div class="no-print mt-6 rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-lg font-bold text-slate-900">Senarai Inovasi Saya</h2>
+        <span class="text-xs text-slate-500">Auto dari Google Sheets</span>
       </div>
 
       <div class="overflow-x-auto">
-        <table class="min-w-full text-sm">
+        <table class="w-full text-sm">
           <thead class="bg-slate-50 text-slate-600">
             <tr>
-              <th class="px-4 py-3 text-left font-medium">Tajuk</th>
-              <th class="px-4 py-3 text-left font-medium">Tahun</th>
-              <th class="px-4 py-3 text-left font-medium">Kategori</th>
-              <th class="px-4 py-3 text-left font-medium">Status</th>
-              <th class="px-4 py-3 text-left font-medium">MyIPO</th>
-              <th class="px-4 py-3 text-left font-medium">ID</th>
+              <th class="text-left py-3 px-4">Tajuk</th>
+              <th class="text-left py-3 px-4">Tahun</th>
+              <th class="text-left py-3 px-4">Kategori</th>
+              <th class="text-left py-3 px-4">Status</th>
+              <th class="text-left py-3 px-4">MyIPO</th>
+              <th class="text-left py-3 px-4">ID</th>
             </tr>
           </thead>
-          <tbody id="tableBody" class="divide-y divide-slate-100"></tbody>
+          <tbody id="tblBody"></tbody>
         </table>
       </div>
 
-      <details class="border-t border-slate-100">
-        <summary class="cursor-pointer px-5 py-3 text-sm text-slate-600">Debug output (kalau nak tengok JSON)</summary>
-        <pre id="debugJson" class="px-5 pb-5 text-xs text-slate-600 overflow-x-auto"></pre>
+      <details class="px-6 py-4 border-t border-slate-200">
+        <summary class="cursor-pointer text-sm text-slate-600">Debug output (kalau nak tengok JSON)</summary>
+        <pre id="debugJson" class="mt-3 text-xs bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-auto"></pre>
       </details>
     </div>
 
-    <!-- Report section (print-only container) -->
-    <div id="reportArea" class="hidden mt-8"></div>
+    <!-- Report Area (this is what gets printed) -->
+    <div class="mt-8" id="reportArea"></div>
 
-    <!-- Toast -->
-    <div id="toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 rounded-2xl border px-4 py-3 shadow-sm">
-      <div class="text-sm" data-toast-text>Toast</div>
+    <div class="mt-10 text-xs text-slate-400">
+      © 2026 kurakurahijau.com
     </div>
-
-    <div class="mt-10 text-xs text-slate-400">© 2026 kurakurahijau.com</div>
   </div>
-
-<script>
-  applyThemeBase();
-  if (!requireAuthOrRedirect()) {}
-
-  qs("#btnLogout").onclick = () => { clearSession(); location.href = "./index.html"; };
-  qs("#btnList").onclick = async () => { await loadInnovationsAndRender(); };
-  qs("#btnReport").onclick = async () => {
-    await generateReport2026();
-    toast("Report ready (print dialog akan keluar)", "success");
-  };
-  qs("#btnPrint").onclick = async () => { await generateReport2026(); };
-
-  // initial load
-  loadInnovationsAndRender();
-</script>
 </body>
 </html>
