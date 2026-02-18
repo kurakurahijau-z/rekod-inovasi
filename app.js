@@ -19,16 +19,26 @@ async function apiGet(action, params={}) {
   return r.json();
 }
 
+/**
+ * IMPORTANT: CORS-safe POST for GitHub Pages -> Apps Script
+ * - DON'T use application/json (will trigger preflight OPTIONS)
+ * - Use text/plain so request stays "simple" (no preflight)
+ */
 async function apiPost(action, params={}, body={}) {
   const url = new URL(cfg.API_BASE);
   url.searchParams.set("action", action);
   Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+
   const r = await fetch(url.toString(), {
     method:"POST",
-    headers:{ "Content-Type":"application/json" },
+    headers:{ "Content-Type":"text/plain;charset=utf-8" },
     body: JSON.stringify(body)
   });
-  return r.json();
+
+  // Apps Script sometimes returns text; parse safely
+  const t = await r.text();
+  try { return JSON.parse(t); }
+  catch { return { ok:false, error:"Invalid JSON from server", raw:t }; }
 }
 
 function requireAuthOrRedirect() {
@@ -86,7 +96,7 @@ async function refreshMyInnovations() {
 
   const items = (r.ok ? (r.items || []) : []);
 
-  // ====== KIRAAN DASHBOARD (auto dari items) ======
+  // ✅ KIRAAN BETUL (dari items)
   const years = new Set();
   let aktifCount = 0;
   let myipoYesCount = 0;
@@ -102,14 +112,14 @@ async function refreshMyInnovations() {
     if (ms === "yes") myipoYesCount++;
   }
 
-  // Update cards kalau ID wujud
+  // Update cards (kalau id wujud)
   const elTotal = qs("#countTotal");
   const elYears = qs("#countYears");
   const elAktif = qs("#countAktif");
   const elMyipo = qs("#countMyipoYes");
 
   if (elTotal) elTotal.textContent = items.length;
-  if (elYears) elYears.textContent = years.size;         // ✅ ini fix "2026" jadi "1"
+  if (elYears) elYears.textContent = years.size;         // ✅ bukan "2026"
   if (elAktif) elAktif.textContent = aktifCount;
   if (elMyipo) elMyipo.textContent = myipoYesCount;
 
@@ -144,7 +154,7 @@ async function refreshReport(year) {
 
   const items = (r.items || []);
 
-  // ====== KIRA SUMMARY REPORT DARI ITEMS (bukan r.summary) ======
+  // ✅ SUMMARY BETUL (kira dari items)
   let total = items.length;
   let aktif = 0;
   let myipoYes = 0;
@@ -159,7 +169,6 @@ async function refreshReport(year) {
     else myipoNo++;
   }
 
-  // Update header/year
   const elYear = qs("#rYear");
   const elTotal = qs("#rTotal");
   const elAktif = qs("#rAktif");
@@ -168,8 +177,8 @@ async function refreshReport(year) {
 
   if (elYear)  elYear.textContent  = String(r.year || year);
   if (elTotal) elTotal.textContent = total;
-  if (elAktif) elAktif.textContent = aktif;       // ✅ fix jadi 1
-  if (elYes)   elYes.textContent   = myipoYes;    // ✅ fix jadi 1
+  if (elAktif) elAktif.textContent = aktif;       // ✅ akan jadi 1
+  if (elYes)   elYes.textContent   = myipoYes;    // ✅ akan jadi 1
   if (elNo)    elNo.textContent    = myipoNo;
 
   const tb = qs("#reportBody");
@@ -182,7 +191,6 @@ async function refreshReport(year) {
   }
 
   for (const it of items) {
-    // backend kadang bagi myipo string terus, kadang bagi myipoStatus/myipoNumber
     const myipo = it.myipo
       ? String(it.myipo)
       : `${it.myipoStatus || ""} / ${it.myipoNumber || ""}`.trim();
