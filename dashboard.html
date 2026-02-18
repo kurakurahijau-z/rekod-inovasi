@@ -6,12 +6,11 @@
   <title>Dashboard - Rekod Inovasi</title>
   <script src="config.js"></script>
   <script src="app.js"></script>
-
   <style>
     :root{ --line:#e5e7eb; --muted:#64748b; --card:#fff; --bg:#f8fafc; --text:#0f172a; }
     body{ margin:0; font-family: ui-sans-serif,system-ui,-apple-system; background:var(--bg); color:var(--text); }
     .wrap{ max-width:1100px; margin:24px auto; padding:0 18px; }
-    .topbar{ display:flex; justify-content:space-between; align-items:center; }
+    .topbar{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
     .who{ color:var(--muted); font-size:14px; }
     .btn{
       border:1px solid var(--line); background:white; padding:10px 14px; border-radius:12px;
@@ -24,50 +23,41 @@
     .kpiVal{ font-size:28px; font-weight:900; margin-top:6px; }
     h2{ margin:18px 0 10px; }
     table{ width:100%; border-collapse:collapse; background:white; border:1px solid var(--line); border-radius:16px; overflow:hidden; }
-    th,td{ padding:10px 12px; border-bottom:1px solid var(--line); font-size:14px; text-align:left; }
+    th,td{ padding:10px 12px; border-bottom:1px solid var(--line); font-size:14px; text-align:left; vertical-align:top; }
     th{ background:#f1f5f9; font-size:13px; color:#334155; }
     .pill{ padding:4px 10px; border-radius:999px; font-size:12px; font-weight:800; display:inline-block; }
     .pill.ok{ background:#dcfce7; color:#166534; }
     .pill.warn{ background:#fef9c3; color:#854d0e; }
     .muted{ color:var(--muted); }
-
-    /* ===== PRINT STYLE ===== */
-    @media print {
-      body { background:white; }
-      .btn { display:none !important; }
-      .topbar { margin-bottom:20px; }
-      .footer-print {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        text-align: center;
-        font-size: 12px;
-        color: #64748b;
-        padding: 8px 0;
-      }
+    .footer{
+      margin:20px 0 10px;
+      text-align:center;
+      color:#0f172a;
+      font-size:13px;
     }
-
     @media (max-width:900px){ .grid{ grid-template-columns: repeat(2,1fr);} }
+    @media print{
+      .btn { display:none !important; }
+      .topbar { gap:0; }
+    }
   </style>
 </head>
-
-<body onload="dashboardInit(); setFooterYear();">
+<body onload="dashboardInit()">
   <div class="wrap">
     <div class="topbar">
       <div class="who">
         Login: <b id="meEmail">-</b> &nbsp; <span class="pill ok" id="meRole">-</span>
       </div>
-      <div style="display:flex; gap:10px; align-items:center;">
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <button class="btn" onclick="refreshMyInnovations()">List My Innovations</button>
-        <button class="btn" onclick="refreshReport('2026')">Generate Report 2026</button>
-        <button class="btn" onclick="doPrint()">Print / Save PDF (Report 2026)</button>
+        <button class="btn" onclick="refreshReport('2026')">Generate Report 2026 (Saya)</button>
+        <button class="btn" onclick="doPrint()">Print / Save PDF</button>
         <button class="btn primary" onclick="location.href='./add-innovation.html'">+ Tambah Inovasi</button>
         <button class="btn" onclick="doLogout()">Logout</button>
       </div>
     </div>
 
-    <!-- KPI -->
+    <!-- KPI (MY) -->
     <div class="grid">
       <div class="card"><div class="kpiLabel">Jumlah Inovasi</div><div class="kpiVal" id="countTotal">0</div></div>
       <div class="card"><div class="kpiLabel">Bil. Tahun Terlibat</div><div class="kpiVal" id="countYears">0</div></div>
@@ -87,9 +77,9 @@
       </tbody>
     </table>
 
-    <h2>Report Inovasi <span id="reportYearLabel">2026</span></h2>
+    <h2>Report Inovasi <span id="rYear">2026</span> (Saya)</h2>
     <div class="grid" style="grid-template-columns:repeat(4,1fr);">
-      <div class="card"><div class="kpiLabel">Jumlah Inovasi (<span id="reportYearSmall">2026</span>)</div><div class="kpiVal" id="rTotal">0</div></div>
+      <div class="card"><div class="kpiLabel">Jumlah Inovasi (2026)</div><div class="kpiVal" id="rTotal">0</div></div>
       <div class="card"><div class="kpiLabel">Status Aktif</div><div class="kpiVal" id="rAktif">0</div></div>
       <div class="card"><div class="kpiLabel">MyIPO Yes</div><div class="kpiVal" id="rMyipoYes">0</div></div>
       <div class="card"><div class="kpiLabel">MyIPO No</div><div class="kpiVal" id="rMyipoNo">0</div></div>
@@ -98,25 +88,38 @@
     <table style="margin-top:10px;">
       <thead><tr><th>Tajuk</th><th>Kategori</th><th>Status</th><th>MyIPO</th></tr></thead>
       <tbody id="reportBody">
-        <tr><td colspan="4" class="muted">Klik "Generate Report 2026".</td></tr>
+        <tr><td colspan="4" class="muted">Klik "Generate Report 2026 (Saya)".</td></tr>
       </tbody>
     </table>
 
     <div class="muted" style="margin-top:10px;">
-      Nota: Report ini memaparkan inovasi tahun 2026 berdasarkan rekod yang didaftarkan oleh ahli kumpulan / ketua kumpulan.
+      Nota: Report ini memaparkan inovasi tahun 2026 berdasarkan rekod anda.
     </div>
+
+    <!-- ADMIN SECTION -->
+    <div id="adminSection" style="display:none; margin-top:26px;">
+      <h2>Report Jabatan <span id="dYear">2026</span> (Admin)</h2>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+        <button class="btn" onclick="refreshDeptReport('2026')">Generate Report Jabatan 2026</button>
+        <div class="muted" id="deptMsg"></div>
+      </div>
+
+      <div class="grid" style="grid-template-columns:repeat(4,1fr);">
+        <div class="card"><div class="kpiLabel">Jumlah Inovasi Jabatan</div><div class="kpiVal" id="dTotal">0</div></div>
+        <div class="card"><div class="kpiLabel">Status Aktif</div><div class="kpiVal" id="dAktif">0</div></div>
+        <div class="card"><div class="kpiLabel">MyIPO Yes</div><div class="kpiVal" id="dMyipoYes">0</div></div>
+        <div class="card"><div class="kpiLabel">MyIPO No</div><div class="kpiVal" id="dMyipoNo">0</div></div>
+      </div>
+
+      <table style="margin-top:10px;">
+        <thead><tr><th>Owner</th><th>Tajuk</th><th>Kategori</th><th>Status</th><th>MyIPO</th></tr></thead>
+        <tbody id="deptBody">
+          <tr><td colspan="5" class="muted">Klik "Generate Report Jabatan 2026".</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="footer">© 2026 kurakurahijau.com</div>
   </div>
-
-  <!-- PRINT FOOTER -->
-  <div class="footer-print">
-    © <span id="footerYear"></span> kurakurahijau.com
-  </div>
-
-  <script>
-    function setFooterYear(){
-      document.getElementById("footerYear").textContent = new Date().getFullYear();
-    }
-  </script>
-
 </body>
 </html>
