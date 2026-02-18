@@ -19,15 +19,13 @@ async function apiGet(action, params={}) {
   return r.json();
 }
 
-// POST tanpa application/json header (kurangkan risiko preflight)
 async function apiPost(action, params={}, body={}) {
   const url = new URL(cfg.API_BASE);
   url.searchParams.set("action", action);
   Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
-
   const r = await fetch(url.toString(), {
     method:"POST",
-    // jangan set Content-Type application/json
+    headers:{ "Content-Type":"application/json" },
     body: JSON.stringify(body)
   });
   return r.json();
@@ -51,10 +49,7 @@ async function loadMe() {
 async function onGoogleCredentialResponse(resp) {
   try {
     qs("#loginStatus").textContent = "Signing in…";
-
-    // IMPORTANT: use GET to avoid CORS preflight
-    const r = await apiGet("loginGoogle", { credential: resp.credential });
-
+    const r = await apiPost("loginGoogle", {}, { credential: resp.credential });
     if (!r.ok) throw new Error(r.error || "Login failed");
 
     setToken(r.token);
@@ -73,8 +68,10 @@ async function dashboardInit() {
   const me = await loadMe();
   if (!me) return;
 
-  qs("#meEmail").textContent = me.email;
-  qs("#meRole").textContent = me.role;
+  const elEmail = qs("#meEmail");
+  const elRole  = qs("#meRole");
+  if (elEmail) elEmail.textContent = me.email;
+  if (elRole)  elRole.textContent  = me.role;
 
   await refreshMyInnovations();
   await refreshReport("2026");
@@ -83,11 +80,40 @@ async function dashboardInit() {
 async function refreshMyInnovations() {
   const token = getToken();
   const r = await apiGet("listMyInnovations", { token });
-  const body = qs("#myListBody");
-  body.innerHTML = "";
 
-  const items = (r.ok ? r.items : []);
-  qs("#countTotal").textContent = items.length;
+  const body = qs("#myListBody");
+  if (body) body.innerHTML = "";
+
+  const items = (r.ok ? (r.items || []) : []);
+
+  // ====== KIRAAN DASHBOARD (auto dari items) ======
+  const years = new Set();
+  let aktifCount = 0;
+  let myipoYesCount = 0;
+
+  for (const it of items) {
+    const y = String(it.tahun || "").trim();
+    if (y) years.add(y);
+
+    const st = String(it.status || "").trim().toLowerCase();
+    if (st === "aktif") aktifCount++;
+
+    const ms = String(it.myipoStatus || "").trim().toLowerCase();
+    if (ms === "yes") myipoYesCount++;
+  }
+
+  // Update cards kalau ID wujud
+  const elTotal = qs("#countTotal");
+  const elYears = qs("#countYears");
+  const elAktif = qs("#countAktif");
+  const elMyipo = qs("#countMyipoYes");
+
+  if (elTotal) elTotal.textContent = items.length;
+  if (elYears) elYears.textContent = years.size;         // ✅ ini fix "2026" jadi "1"
+  if (elAktif) elAktif.textContent = aktifCount;
+  if (elMyipo) elMyipo.textContent = myipoYesCount;
+
+  if (!body) return;
 
   if (!items.length) {
     body.innerHTML = `<tr><td colspan="6" class="muted">Belum ada rekod inovasi.</td></tr>`;
@@ -96,12 +122,14 @@ async function refreshMyInnovations() {
 
   for (const it of items) {
     const myipo = `${it.myipoStatus || ""} / ${it.myipoNumber || ""}`.trim();
+    const pillCls = (String(it.status||"").toLowerCase()==="aktif") ? "ok" : "warn";
+
     body.innerHTML += `
       <tr>
         <td>${escapeHtml(it.tajuk || "")}</td>
         <td>${escapeHtml(it.tahun || "")}</td>
         <td>${escapeHtml(it.kategori || "")}</td>
-        <td><span class="pill ${((it.status||"").toLowerCase()==="aktif")?"ok":"warn"}">${escapeHtml(it.status||"")}</span></td>
+        <td><span class="pill ${pillCls}">${escapeHtml(it.status||"")}</span></td>
         <td>${escapeHtml(myipo)}</td>
         <td><code>${escapeHtml(it.innovationId||"")}</code></td>
       </tr>
@@ -114,39 +142,78 @@ async function refreshReport(year) {
   const r = await apiGet("generateReport", { token, year });
   if (!r.ok) return;
 
-  qs("#rYear").textContent = r.year;
-  qs("#rTotal").textContent = r.summary.total;
-  qs("#rAktif").textContent = r.summary.aktif;
-  qs("#rMyipoYes").textContent = r.summary.myipoYes;
-  qs("#rMyipoNo").textContent = r.summary.myipoNo;
+  const items = (r.items || []);
+
+  // ====== KIRA SUMMARY REPORT DARI ITEMS (bukan r.summary) ======
+  let total = items.length;
+  let aktif = 0;
+  let myipoYes = 0;
+  let myipoNo = 0;
+
+  for (const it of items) {
+    const st = String(it.status || "").trim().toLowerCase();
+    if (st === "aktif") aktif++;
+
+    const ms = String(it.myipoStatus || "").trim().toLowerCase();
+    if (ms === "yes") myipoYes++;
+    else myipoNo++;
+  }
+
+  // Update header/year
+  const elYear = qs("#rYear");
+  const elTotal = qs("#rTotal");
+  const elAktif = qs("#rAktif");
+  const elYes = qs("#rMyipoYes");
+  const elNo = qs("#rMyipoNo");
+
+  if (elYear)  elYear.textContent  = String(r.year || year);
+  if (elTotal) elTotal.textContent = total;
+  if (elAktif) elAktif.textContent = aktif;       // ✅ fix jadi 1
+  if (elYes)   elYes.textContent   = myipoYes;    // ✅ fix jadi 1
+  if (elNo)    elNo.textContent    = myipoNo;
 
   const tb = qs("#reportBody");
+  if (!tb) return;
+
   tb.innerHTML = "";
-  if (!r.items.length) {
-    tb.innerHTML = `<tr><td colspan="4" class="muted">Tiada rekod untuk tahun ${escapeHtml(r.year)}.</td></tr>`;
+  if (!items.length) {
+    tb.innerHTML = `<tr><td colspan="4" class="muted">Tiada rekod untuk tahun ${escapeHtml(String(r.year || year))}.</td></tr>`;
     return;
   }
-  for (const it of r.items) {
+
+  for (const it of items) {
+    // backend kadang bagi myipo string terus, kadang bagi myipoStatus/myipoNumber
+    const myipo = it.myipo
+      ? String(it.myipo)
+      : `${it.myipoStatus || ""} / ${it.myipoNumber || ""}`.trim();
+
     tb.innerHTML += `
       <tr>
         <td>${escapeHtml(it.tajuk||"")}</td>
         <td>${escapeHtml(it.kategori||"")}</td>
         <td>${escapeHtml(it.status||"")}</td>
-        <td>${escapeHtml(it.myipo||"")}</td>
+        <td>${escapeHtml(myipo||"")}</td>
       </tr>
     `;
   }
 }
 
-function doPrint() { window.print(); }
-function doLogout(){ clearToken(); location.href = "./index.html"; }
+function doPrint() {
+  window.print();
+}
+
+function doLogout() {
+  clearToken();
+  location.href = "./index.html";
+}
 
 // ===== Add Innovation =====
 async function addInnovationInit() {
   requireAuthOrRedirect();
   const me = await loadMe();
   if (!me) return;
-  qs("#meEmail").textContent = me.email;
+  const elEmail = qs("#meEmail");
+  if (elEmail) elEmail.textContent = me.email;
 }
 
 async function submitInnovation(e) {
