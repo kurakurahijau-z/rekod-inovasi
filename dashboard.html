@@ -1,361 +1,125 @@
-/******************************************************
- * Rekod Inovasi Jabatan - Backend (Google Apps Script)
- * - Works with GitHub Pages frontend (CORS-safe approach)
- * - IMPORTANT: loginGoogle uses GET (no preflight)
- ******************************************************/
-
-const SHEETS = {
-  USERS: "Users",
-  STAFF: "StaffDirectory",
-  SESSIONS: "Sessions",
-  INNOVATIONS: "Innovations",
-  TEAM: "TeamMembers",
-  COMPS: "Competitions",
-};
-
-function doGet(e) { return api_(e, "GET"); }
-function doPost(e){ return api_(e, "POST"); }
-
-function api_(e, method){
-  try{
-    const action = (e.parameter.action || "").trim();
-    if (!action) return json_({ ok:false, error:"Missing action" });
-
-    let body = {};
-    if (method === "POST") {
-      const raw = e.postData && e.postData.contents ? e.postData.contents : "";
-      if (raw) { try { body = JSON.parse(raw); } catch(err){ body = {}; } }
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard - Rekod Inovasi</title>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <style>
+    :root{ --line:#e5e7eb; --muted:#64748b; --card:#fff; --bg:#f8fafc; --text:#0f172a; }
+    body{ margin:0; font-family: ui-sans-serif,system-ui,-apple-system; background:var(--bg); color:var(--text); }
+    .wrap{ max-width:1100px; margin:24px auto; padding:0 18px; }
+    .topbar{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+    .who{ color:var(--muted); font-size:14px; }
+    .btn{
+      border:1px solid var(--line); background:white; padding:10px 14px; border-radius:12px;
+      cursor:pointer; font-weight:700;
     }
-
-    switch(action){
-
-      case "ping":
-        return json_({ ok:true, ts:new Date().toISOString() });
-
-      // ---- Google login (CORS-safe: GET)
-      case "loginGoogle": {
-        const credential = (e.parameter.credential || "").trim() || (body.credential || "");
-        if (!credential) return json_({ ok:false, error:"Missing credential" });
-
-        const payload = verifyGoogleIdToken_(credential);
-        if (!payload.ok) return json_({ ok:false, error: payload.error || "Invalid Google token" });
-
-        const email = String(payload.email || "").toLowerCase().trim();
-        if (!email) return json_({ ok:false, error:"Email missing in token" });
-
-        if (!existsInSheet_(SHEETS.STAFF, "email", email)) {
-          return json_({ ok:false, error:"Email not in StaffDirectory whitelist" });
-        }
-
-        const role = getRole_(email); // admin/user
-        ensureUserRow_(email, role);
-
-        const token = createSession_(email);
-        return json_({ ok:true, token, email, role });
-      }
-
-      case "me": {
-        const token = (e.parameter.token || "").trim();
-        const sess = getSession_(token);
-        if (!sess.ok) return json_({ ok:false, error: sess.error || "Invalid session" });
-        const role = getRole_(sess.email);
-        touchSession_(token);
-        return json_({ ok:true, email:sess.email, role });
-      }
-
-      case "listMyInnovations": {
-        const token = (e.parameter.token || "").trim();
-        const sess = getSession_(token);
-        if (!sess.ok) return json_({ ok:false, error: sess.error });
-
-        touchSession_(token);
-        const items = listInnovationsByOwner_(sess.email);
-        return json_({ ok:true, items });
-      }
-
-      case "addInnovation": {
-        const token = (e.parameter.token || "").trim();
-        const sess = getSession_(token);
-        if (!sess.ok) return json_({ ok:false, error: sess.error });
-
-        const p = body || {};
-        const tajuk = String(p.tajuk||"").trim();
-        const tahun = String(p.tahun||"").trim();
-        const kategori = String(p.kategori||"").trim();
-        const status = String(p.status||"").trim();
-        const myipoStatus = String(p.myipoStatus||"").trim();
-        const myipoNumber = String(p.myipoNumber||"").trim();
-
-        if (!tajuk || !tahun) return json_({ ok:false, error:"Tajuk & tahun wajib isi" });
-
-        const innovationId = uuid_();
-        appendRow_(SHEETS.INNOVATIONS, [
-          innovationId,
-          tajuk,
-          tahun,
-          kategori,
-          status,
-          myipoStatus,
-          myipoNumber,
-          sess.email,
-          new Date().toISOString(),
-        ]);
-
-        touchSession_(token);
-        return json_({ ok:true, innovationId });
-      }
-
-      // ---- report (MY)
-      case "generateReport": {
-        const token = (e.parameter.token || "").trim();
-        const year  = String(e.parameter.year || "").trim();
-        const sess = getSession_(token);
-        if (!sess.ok) return json_({ ok:false, error: sess.error });
-        if (!year) return json_({ ok:false, error:"Missing year" });
-
-        touchSession_(token);
-
-        const all = listInnovationsByOwner_(sess.email)
-          .filter(x => String(x.tahun||"").trim() === year);
-
-        return json_({
-          ok:true,
-          year,
-          items: all.map(x => ({
-            tajuk: x.tajuk || "",
-            kategori: x.kategori || "",
-            status: x.status || "",
-            myipoStatus: x.myipoStatus || "",
-            myipoNumber: x.myipoNumber || "",
-          }))
-        });
-      }
-
-      // ---- report (DEPT) ADMIN ONLY
-      case "generateDeptReport": {
-        const token = (e.parameter.token || "").trim();
-        const year  = String(e.parameter.year || "").trim();
-        const sess = getSession_(token);
-        if (!sess.ok) return json_({ ok:false, error: sess.error });
-        if (!year) return json_({ ok:false, error:"Missing year" });
-
-        const role = getRole_(sess.email);
-        if (role !== "admin") return json_({ ok:false, error:"Forbidden (admin only)" });
-
-        touchSession_(token);
-
-        const all = listInnovationsAll_().filter(x => String(x.tahun||"").trim() === year);
-
-        return json_({
-          ok:true,
-          year,
-          items: all.map(x => ({
-            ownerEmail: x.ownerEmail || "",
-            tajuk: x.tajuk || "",
-            kategori: x.kategori || "",
-            status: x.status || "",
-            myipoStatus: x.myipoStatus || "",
-            myipoNumber: x.myipoNumber || "",
-          }))
-        });
-      }
-
-      default:
-        return json_({ ok:false, error:`Unknown action: ${action}` });
+    .btn.primary{ background:#0f172a; color:white; border-color:#0f172a; }
+    .grid{ display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:14px; margin-top:16px; }
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; }
+    .kpiLabel{ color:var(--muted); font-size:12px; }
+    .kpiVal{ font-size:28px; font-weight:900; margin-top:6px; }
+    h2{ margin:18px 0 10px; }
+    table{ width:100%; border-collapse:collapse; background:white; border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+    th,td{ padding:10px 12px; border-bottom:1px solid var(--line); font-size:14px; text-align:left; vertical-align:top; }
+    th{ background:#f1f5f9; font-size:13px; color:#334155; }
+    .pill{ padding:4px 10px; border-radius:999px; font-size:12px; font-weight:800; display:inline-block; }
+    .pill.ok{ background:#dcfce7; color:#166534; }
+    .pill.warn{ background:#fef9c3; color:#854d0e; }
+    .muted{ color:var(--muted); }
+    .footer{
+      margin:20px 0 10px;
+      text-align:center;
+      color:#0f172a;
+      font-size:13px;
     }
+    @media (max-width:900px){ .grid{ grid-template-columns: repeat(2,1fr);} }
+    @media print{
+      .btn { display:none !important; }
+      .topbar { gap:0; }
+    }
+  </style>
+</head>
+<body onload="dashboardInit()">
+  <div class="wrap">
+    <div class="topbar">
+      <div class="who">
+        Login: <b id="meEmail">-</b> &nbsp; <span class="pill ok" id="meRole">-</span>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button class="btn" onclick="refreshMyInnovations()">List My Innovations</button>
+        <button class="btn" onclick="refreshReport('2026')">Generate Report 2026 (Saya)</button>
+        <button class="btn" onclick="doPrint()">Print / Save PDF</button>
+        <button class="btn primary" onclick="location.href='./add-innovation.html'">+ Tambah Inovasi</button>
+        <button class="btn" onclick="doLogout()">Logout</button>
+      </div>
+    </div>
 
-  } catch(err){
-    return json_({ ok:false, error: String(err && err.message ? err.message : err) });
-  }
-}
+    <!-- KPI (MY) -->
+    <div class="grid">
+      <div class="card"><div class="kpiLabel">Jumlah Inovasi</div><div class="kpiVal" id="countTotal">0</div></div>
+      <div class="card"><div class="kpiLabel">Bil. Tahun Terlibat</div><div class="kpiVal" id="countYears">0</div></div>
+      <div class="card"><div class="kpiLabel">Status Aktif</div><div class="kpiVal" id="countAktif">0</div></div>
+      <div class="card"><div class="kpiLabel">MyIPO (Yes)</div><div class="kpiVal" id="countMyipoYes">0</div></div>
+    </div>
 
-/* =========================
-   Helpers (Sheets)
-========================= */
+    <h2>Senarai Inovasi Saya</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Tajuk</th><th>Tahun</th><th>Kategori</th><th>Status</th><th>MyIPO</th><th>ID</th>
+        </tr>
+      </thead>
+      <tbody id="myListBody">
+        <tr><td colspan="6" class="muted">Loading…</td></tr>
+      </tbody>
+    </table>
 
-function ss_(){ return SpreadsheetApp.getActiveSpreadsheet(); }
+    <h2>Report Inovasi <span id="rYear">2026</span> (Saya)</h2>
+    <div class="grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="card"><div class="kpiLabel">Jumlah Inovasi (2026)</div><div class="kpiVal" id="rTotal">0</div></div>
+      <div class="card"><div class="kpiLabel">Status Aktif</div><div class="kpiVal" id="rAktif">0</div></div>
+      <div class="card"><div class="kpiLabel">MyIPO Yes</div><div class="kpiVal" id="rMyipoYes">0</div></div>
+      <div class="card"><div class="kpiLabel">MyIPO No</div><div class="kpiVal" id="rMyipoNo">0</div></div>
+    </div>
 
-function sheet_(name){
-  const sh = ss_().getSheetByName(name);
-  if (!sh) throw new Error(`Missing sheet: ${name}`);
-  return sh;
-}
+    <table style="margin-top:10px;">
+      <thead><tr><th>Tajuk</th><th>Kategori</th><th>Status</th><th>MyIPO</th></tr></thead>
+      <tbody id="reportBody">
+        <tr><td colspan="4" class="muted">Klik "Generate Report 2026 (Saya)".</td></tr>
+      </tbody>
+    </table>
 
-function headers_(sh){
-  const lastCol = Math.max(1, sh.getLastColumn());
-  return sh.getRange(1,1,1,lastCol).getValues()[0].map(h => String(h||"").trim());
-}
+    <div class="muted" style="margin-top:10px;">
+      Nota: Report ini memaparkan inovasi tahun 2026 berdasarkan rekod anda.
+    </div>
 
-function colIndex_(sh, colName){
-  const hs = headers_(sh);
-  const idx = hs.indexOf(colName);
-  if (idx === -1) throw new Error(`Missing column "${colName}" in sheet ${sh.getName()}`);
-  return idx + 1;
-}
+    <!-- ADMIN SECTION -->
+    <div id="adminSection" style="display:none; margin-top:26px;">
+      <h2>Report Jabatan <span id="dYear">2026</span> (Admin)</h2>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+        <button class="btn" onclick="refreshDeptReport('2026')">Generate Report Jabatan 2026</button>
+        <div class="muted" id="deptMsg"></div>
+      </div>
 
-function existsInSheet_(sheetName, colName, value){
-  const sh = sheet_(sheetName);
-  const col = colIndex_(sh, colName);
-  const lastRow = sh.getLastRow();
-  if (lastRow < 2) return false;
-  const vals = sh.getRange(2,col,lastRow-1,1).getValues().flat().map(v => String(v||"").toLowerCase().trim());
-  return vals.includes(String(value||"").toLowerCase().trim());
-}
+      <div class="grid" style="grid-template-columns:repeat(4,1fr);">
+        <div class="card"><div class="kpiLabel">Jumlah Inovasi Jabatan</div><div class="kpiVal" id="dTotal">0</div></div>
+        <div class="card"><div class="kpiLabel">Status Aktif</div><div class="kpiVal" id="dAktif">0</div></div>
+        <div class="card"><div class="kpiLabel">MyIPO Yes</div><div class="kpiVal" id="dMyipoYes">0</div></div>
+        <div class="card"><div class="kpiLabel">MyIPO No</div><div class="kpiVal" id="dMyipoNo">0</div></div>
+      </div>
 
-function findRowBy_(sheetName, colName, value){
-  const sh = sheet_(sheetName);
-  const col = colIndex_(sh, colName);
-  const lastRow = sh.getLastRow();
-  if (lastRow < 2) return 0;
-  const vals = sh.getRange(2,col,lastRow-1,1).getValues().flat();
-  const target = String(value||"").toLowerCase().trim();
-  for (let i=0;i<vals.length;i++){
-    if (String(vals[i]||"").toLowerCase().trim() === target) return i+2;
-  }
-  return 0;
-}
+      <table style="margin-top:10px;">
+        <thead><tr><th>Owner</th><th>Tajuk</th><th>Kategori</th><th>Status</th><th>MyIPO</th></tr></thead>
+        <tbody id="deptBody">
+          <tr><td colspan="5" class="muted">Klik "Generate Report Jabatan 2026".</td></tr>
+        </tbody>
+      </table>
+    </div>
 
-function appendRow_(sheetName, arr){
-  sheet_(sheetName).appendRow(arr);
-}
-
-/* =========================
-   Users & Roles
-========================= */
-
-function getRole_(email){
-  const sh = sheet_(SHEETS.USERS);
-  const r = findRowBy_(SHEETS.USERS, "email", email);
-  if (!r) return "user";
-  const roleCol = colIndex_(sh, "role");
-  const role = String(sh.getRange(r, roleCol).getValue() || "").trim();
-  return role ? role : "user";
-}
-
-function ensureUserRow_(email, role){
-  const sh = sheet_(SHEETS.USERS);
-  const r = findRowBy_(SHEETS.USERS, "email", email);
-  const roleCol  = colIndex_(sh, "role");
-  const createdCol = colIndex_(sh, "createdAt");
-
-  if (!r){
-    sh.appendRow([ email, role || "user", new Date().toISOString() ]);
-    return;
-  }
-
-  const existingRole = String(sh.getRange(r, roleCol).getValue() || "").trim();
-  if (!existingRole && role) sh.getRange(r, roleCol).setValue(role);
-
-  const ca = sh.getRange(r, createdCol).getValue();
-  if (!ca) sh.getRange(r, createdCol).setValue(new Date().toISOString());
-}
-
-/* =========================
-   Sessions
-========================= */
-
-function createSession_(email){
-  const token = uuid_() + uuid_();
-  appendRow_(SHEETS.SESSIONS, [ token, email, new Date().toISOString(), new Date().toISOString() ]);
-  return token;
-}
-
-function getSession_(token){
-  if (!token) return { ok:false, error:"Missing token" };
-  const sh = sheet_(SHEETS.SESSIONS);
-  const r = findRowBy_(SHEETS.SESSIONS, "token", token);
-  if (!r) return { ok:false, error:"Session not found" };
-  const emailCol = colIndex_(sh, "email");
-  const email = String(sh.getRange(r, emailCol).getValue() || "").toLowerCase().trim();
-  return { ok:true, email };
-}
-
-function touchSession_(token){
-  const sh = sheet_(SHEETS.SESSIONS);
-  const r = findRowBy_(SHEETS.SESSIONS, "token", token);
-  if (!r) return;
-  const lastSeenCol = colIndex_(sh, "lastSeenAt");
-  sh.getRange(r, lastSeenCol).setValue(new Date().toISOString());
-}
-
-/* =========================
-   Innovations
-========================= */
-
-function listInnovationsByOwner_(email){
-  const sh = sheet_(SHEETS.INNOVATIONS);
-
-  const hs = headers_(sh);
-  const lastRow = sh.getLastRow();
-  if (lastRow < 2) return [];
-
-  const data = sh.getRange(2,1,lastRow-1,hs.length).getValues();
-  const idx = (name) => hs.indexOf(name);
-
-  const ownerIdx = idx("ownerEmail");
-  return data
-    .filter(row => String(row[ownerIdx]||"").toLowerCase().trim() === String(email||"").toLowerCase().trim())
-    .map(row => ({
-      innovationId: row[idx("innovationId")] || "",
-      tajuk: row[idx("tajuk")] || "",
-      tahun: row[idx("tahun")] || "",
-      kategori: row[idx("kategori")] || "",
-      status: row[idx("status")] || "",
-      myipoStatus: row[idx("myipoStatus")] || "",
-      myipoNumber: row[idx("myipoNumber")] || "",
-      ownerEmail: row[ownerIdx] || "",
-      createdAt: row[idx("createdAt")] || "",
-    }));
-}
-
-function listInnovationsAll_(){
-  const sh = sheet_(SHEETS.INNOVATIONS);
-  const hs = headers_(sh);
-  const lastRow = sh.getLastRow();
-  if (lastRow < 2) return [];
-
-  const data = sh.getRange(2,1,lastRow-1,hs.length).getValues();
-  const idx = (name) => hs.indexOf(name);
-
-  return data.map(row => ({
-    innovationId: row[idx("innovationId")] || "",
-    tajuk: row[idx("tajuk")] || "",
-    tahun: row[idx("tahun")] || "",
-    kategori: row[idx("kategori")] || "",
-    status: row[idx("status")] || "",
-    myipoStatus: row[idx("myipoStatus")] || "",
-    myipoNumber: row[idx("myipoNumber")] || "",
-    ownerEmail: row[idx("ownerEmail")] || "",
-    createdAt: row[idx("createdAt")] || "",
-  }));
-}
-
-/* =========================
-   Google Token Verify (ID Token)
-========================= */
-function verifyGoogleIdToken_(idToken){
-  try{
-    const url = "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(idToken);
-    const res = UrlFetchApp.fetch(url, { muteHttpExceptions:true });
-    const code = res.getResponseCode();
-    if (code !== 200) return { ok:false, error:"tokeninfo invalid" };
-
-    const j = JSON.parse(res.getContentText());
-    return { ok:true, email: j.email || "", hd: j.hd || "", aud: j.aud || "" };
-  } catch(err){
-    return { ok:false, error:"verify failed" };
-  }
-}
-
-/* =========================
-   Utils
-========================= */
-function json_(obj){
-  return ContentService
-    .createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function uuid_(){
-  return Utilities.getUuid().replace(/-/g,"");
-}
+    <div class="footer">© 2026 kurakurahijau.com</div>
+  </div>
+</body>
+</html>
