@@ -57,10 +57,9 @@ async function loadMe() {
 // ===== Google Sign-In callback =====
 async function onGoogleCredentialResponse(resp) {
   try {
-    const st = qs("#loginStatus");
-    if (st) st.textContent = "Signing in…";
+    const s = qs("#loginStatus");
+    if (s) s.textContent = "Signing in…";
 
-    // Keep current working flow: POST text/plain (CORS-safe)
     const r = await apiPost("loginGoogle", {}, { credential: resp.credential });
     if (!r.ok) throw new Error(r.error || "Login failed");
 
@@ -70,8 +69,8 @@ async function onGoogleCredentialResponse(resp) {
 
     location.href = "./dashboard.html";
   } catch (e) {
-    const st = qs("#loginStatus");
-    if (st) st.textContent = "Login failed: " + e.message;
+    const s = qs("#loginStatus");
+    if (s) s.textContent = "Login failed: " + e.message;
   }
 }
 
@@ -90,14 +89,6 @@ async function dashboardInit() {
   await refreshReport("2026");
 }
 
-function norm_(v){
-  return String(v ?? "")
-    .toLowerCase()
-    .replace(/\u200B/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 async function refreshMyInnovations() {
   const token = getToken();
   const r = await apiGet("listMyInnovations", { token });
@@ -107,7 +98,7 @@ async function refreshMyInnovations() {
 
   const items = (r.ok ? (r.items || []) : []);
 
-  // ===== Cards =====
+  // ===== KPI based on listMyInnovations =====
   const years = new Set();
   let aktifCount = 0;
   let myipoYesCount = 0;
@@ -116,11 +107,11 @@ async function refreshMyInnovations() {
     const y = String(it.tahun || "").trim();
     if (y) years.add(y);
 
-    const st = norm_(it.status);
-    if (st === "aktif" || st.includes("aktif")) aktifCount++;
+    const st = String(it.status || "").trim().toLowerCase();
+    if (st === "aktif") aktifCount++;
 
-    const ms = norm_(it.myipoStatus);
-    if (ms === "yes" || ms === "y" || ms === "ya" || ms.includes("yes")) myipoYesCount++;
+    const ms = String(it.myipoStatus || "").trim().toLowerCase();
+    if (ms === "yes") myipoYesCount++;
   }
 
   const elTotal = qs("#countTotal");
@@ -142,7 +133,7 @@ async function refreshMyInnovations() {
 
   for (const it of items) {
     const myipo = `${it.myipoStatus || ""} / ${it.myipoNumber || ""}`.trim();
-    const pillCls = (norm_(it.status) === "aktif" || norm_(it.status).includes("aktif")) ? "ok" : "warn";
+    const pillCls = (String(it.status||"").toLowerCase()==="aktif") ? "ok" : "warn";
 
     body.innerHTML += `
       <tr>
@@ -157,33 +148,62 @@ async function refreshMyInnovations() {
   }
 }
 
+// Helper: detect yes/no from backend item
+function isMyipoYes_(it){
+  // if backend returns structured fields
+  if (it && typeof it.myipoStatus !== "undefined") {
+    return String(it.myipoStatus||"").trim().toLowerCase() === "yes";
+  }
+  // else parse from "myipo" string: "yes / LYCxxxx" or "no /"
+  const my = String(it && it.myipo ? it.myipo : "").trim().toLowerCase();
+  if (!my) return false;
+  const left = my.split("/")[0].trim(); // "yes" or "no"
+  return left === "yes";
+}
+
 async function refreshReport(year) {
   const token = getToken();
   const r = await apiGet("generateReport", { token, year });
   if (!r.ok) return;
 
-  // ✅ guna summary dari backend (yang dah normalize betul)
-  const s = r.summary || { total:0, aktif:0, myipoYes:0, myipoNo:0 };
+  const items = (r.items || []);
 
-  const elYear = qs("#rYear");
+  // ===== SUMMARY (compute safely even if backend only returns myipo string) =====
+  let total = items.length;
+  let aktif = 0;
+  let myipoYes = 0;
+  let myipoNo = 0;
+
+  for (const it of items) {
+    const st = String(it.status || "").trim().toLowerCase();
+    if (st === "aktif") aktif++;
+
+    if (isMyipoYes_(it)) myipoYes++;
+    else myipoNo++;
+  }
+
+  const y = String(r.year || year);
+
+  const elYear1 = qs("#reportYearLabel");
+  const elYear2 = qs("#reportYearSmall");
   const elTotal = qs("#rTotal");
   const elAktif = qs("#rAktif");
-  const elYes = qs("#rMyipoYes");
-  const elNo = qs("#rMyipoNo");
+  const elYes   = qs("#rMyipoYes");
+  const elNo    = qs("#rMyipoNo");
 
-  if (elYear)  elYear.textContent  = String(r.year || year);
-  if (elTotal) elTotal.textContent = String(s.total ?? 0);
-  if (elAktif) elAktif.textContent = String(s.aktif ?? 0);
-  if (elYes)   elYes.textContent   = String(s.myipoYes ?? 0);
-  if (elNo)    elNo.textContent    = String(s.myipoNo ?? 0);
+  if (elYear1) elYear1.textContent = y;
+  if (elYear2) elYear2.textContent = y;
+  if (elTotal) elTotal.textContent = total;
+  if (elAktif) elAktif.textContent = aktif;
+  if (elYes)   elYes.textContent   = myipoYes;
+  if (elNo)    elNo.textContent    = myipoNo;
 
-  const items = (r.items || []);
   const tb = qs("#reportBody");
   if (!tb) return;
 
   tb.innerHTML = "";
   if (!items.length) {
-    tb.innerHTML = `<tr><td colspan="4" class="muted">Tiada rekod untuk tahun ${escapeHtml(String(r.year || year))}.</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="4" class="muted">Tiada rekod untuk tahun ${escapeHtml(y)}.</td></tr>`;
     return;
   }
 
@@ -203,7 +223,9 @@ async function refreshReport(year) {
   }
 }
 
-function doPrint() { window.print(); }
+function doPrint() {
+  window.print();
+}
 
 function doLogout() {
   clearToken();
@@ -240,7 +262,6 @@ async function submitInnovation(e) {
     if (msg) msg.textContent = "Gagal: " + (r.error || "");
     return;
   }
-
   if (msg) msg.textContent = "Berjaya simpan ✅";
   setTimeout(()=> location.href="./dashboard.html", 600);
 }
