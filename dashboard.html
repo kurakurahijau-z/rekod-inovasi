@@ -2,132 +2,87 @@
 <html lang="ms">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard - Rekod Inovasi</title>
-
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="./config.js"></script>
-  <script src="./app.js"></script>
-
+  <script src="config.js"></script>
+  <script src="app.js"></script>
   <style>
-    body { background: #f8fafc; }
-    /* Print only report area */
-    @media print {
-      body { background: white; }
-      .no-print { display: none !important; }
-      .print-only { display: block !important; }
-      .printable { border: 0 !important; box-shadow: none !important; }
+    :root{ --line:#e5e7eb; --muted:#64748b; --card:#fff; --bg:#f8fafc; --text:#0f172a; }
+    body{ margin:0; font-family: ui-sans-serif,system-ui,-apple-system; background:var(--bg); color:var(--text); }
+    .wrap{ max-width:1100px; margin:24px auto; padding:0 18px; }
+    .topbar{ display:flex; justify-content:space-between; align-items:center; }
+    .who{ color:var(--muted); font-size:14px; }
+    .btn{
+      border:1px solid var(--line); background:white; padding:10px 14px; border-radius:12px;
+      cursor:pointer; font-weight:700;
     }
+    .btn.primary{ background:#0f172a; color:white; border-color:#0f172a; }
+    .grid{ display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:14px; margin-top:16px; }
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; }
+    .kpiLabel{ color:var(--muted); font-size:12px; }
+    .kpiVal{ font-size:28px; font-weight:900; margin-top:6px; }
+    h2{ margin:18px 0 10px; }
+    table{ width:100%; border-collapse:collapse; background:white; border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+    th,td{ padding:10px 12px; border-bottom:1px solid var(--line); font-size:14px; text-align:left; }
+    th{ background:#f1f5f9; font-size:13px; color:#334155; }
+    .pill{ padding:4px 10px; border-radius:999px; font-size:12px; font-weight:800; display:inline-block; }
+    .pill.ok{ background:#dcfce7; color:#166534; }
+    .pill.warn{ background:#fef9c3; color:#854d0e; }
+    .muted{ color:var(--muted); }
+    @media (max-width:900px){ .grid{ grid-template-columns: repeat(2,1fr);} }
   </style>
 </head>
-
-<body data-page="dashboard" class="min-h-screen">
-  <div id="toast" class="fixed top-4 right-4 opacity-0"></div>
-
-  <!-- top loading bar -->
-  <div id="loadingBar" class="hidden fixed top-0 left-0 right-0 h-1 bg-indigo-200">
-    <div class="h-1 w-1/2 bg-indigo-500 animate-pulse"></div>
-  </div>
-
-  <div class="max-w-6xl mx-auto p-6">
-    <!-- Header -->
-    <div class="no-print flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-      <div>
-        <h1 class="text-3xl font-extrabold text-slate-900">Dashboard</h1>
-        <div class="mt-1 text-sm text-slate-600 flex flex-wrap items-center gap-2">
-          <span>Login: <b id="topEmail" class="text-slate-800">-</b></span>
-          <span class="px-2 py-1 rounded-full text-xs bg-indigo-50 text-indigo-700 border border-indigo-100" id="topRole">user</span>
-        </div>
+<body onload="dashboardInit()">
+  <div class="wrap">
+    <div class="topbar">
+      <div class="who">
+        Login: <b id="meEmail">-</b> &nbsp; <span class="pill ok" id="meRole">-</span>
       </div>
-
-      <div class="flex gap-2">
-        <button id="btnLogout" class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm">
-          Logout
-        </button>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="btn" onclick="refreshMyInnovations()">List My Innovations</button>
+        <button class="btn" onclick="refreshReport('2026')">Generate Report 2026</button>
+        <button class="btn" onclick="doPrint()">Print / Save PDF (Report 2026)</button>
+        <button class="btn primary" onclick="location.href='./add-innovation.html'">+ Tambah Inovasi</button>
+        <button class="btn" onclick="doLogout()">Logout</button>
       </div>
     </div>
 
-    <!-- Actions -->
-    <div class="no-print mt-6 flex flex-wrap gap-2">
-      <button id="btnList" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm shadow-sm">
-        List My Innovations
-      </button>
-
-      <div class="flex items-center gap-2">
-        <select id="reportYear" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm">
-          <option value="2026">2026</option>
-          <option value="2025">2025</option>
-          <option value="2024">2024</option>
-        </select>
-
-        <button id="btnPrint" class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm">
-          Print / Save PDF (Report)
-        </button>
-      </div>
-
-      <button id="btnAdd" class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm">
-        + Tambah Inovasi
-      </button>
-
-      <button id="btnRefresh" class="px-4 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm">
-        Refresh
-      </button>
+    <div class="grid">
+      <div class="card"><div class="kpiLabel">Jumlah Inovasi</div><div class="kpiVal" id="countTotal">0</div></div>
+      <div class="card"><div class="kpiLabel">Bil. Tahun Terlibat</div><div class="kpiVal" id="rYear">2026</div></div>
+      <div class="card"><div class="kpiLabel">Status Aktif</div><div class="kpiVal" id="rAktif">0</div></div>
+      <div class="card"><div class="kpiLabel">MyIPO (Yes)</div><div class="kpiVal" id="rMyipoYes">0</div></div>
     </div>
 
-    <!-- KPI -->
-    <div class="no-print mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-      <div class="rounded-2xl border border-slate-200 bg-white p-5">
-        <div class="text-xs text-slate-500">Jumlah Inovasi</div>
-        <div id="statTotal" class="text-3xl font-extrabold text-slate-900 mt-1">0</div>
-      </div>
-      <div class="rounded-2xl border border-slate-200 bg-white p-5">
-        <div class="text-xs text-slate-500">Bil. Tahun Terlibat</div>
-        <div id="statYears" class="text-3xl font-extrabold text-slate-900 mt-1">0</div>
-      </div>
-      <div class="rounded-2xl border border-slate-200 bg-white p-5">
-        <div class="text-xs text-slate-500">Status Aktif</div>
-        <div id="statAktif" class="text-3xl font-extrabold text-slate-900 mt-1">0</div>
-      </div>
-      <div class="rounded-2xl border border-slate-200 bg-white p-5">
-        <div class="text-xs text-slate-500">MyIPO (Yes)</div>
-        <div id="statMyipo" class="text-3xl font-extrabold text-slate-900 mt-1">0</div>
-      </div>
+    <h2>Senarai Inovasi Saya</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Tajuk</th><th>Tahun</th><th>Kategori</th><th>Status</th><th>MyIPO</th><th>ID</th>
+        </tr>
+      </thead>
+      <tbody id="myListBody">
+        <tr><td colspan="6" class="muted">Loading…</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Report Inovasi <span id="rYear">2026</span></h2>
+    <div class="grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="card"><div class="kpiLabel">Jumlah Inovasi (2026)</div><div class="kpiVal" id="rTotal">0</div></div>
+      <div class="card"><div class="kpiLabel">Status Aktif</div><div class="kpiVal" id="rAktif">0</div></div>
+      <div class="card"><div class="kpiLabel">MyIPO Yes</div><div class="kpiVal" id="rMyipoYes">0</div></div>
+      <div class="card"><div class="kpiLabel">MyIPO No</div><div class="kpiVal" id="rMyipoNo">0</div></div>
     </div>
 
-    <!-- Table -->
-    <div class="no-print mt-6 rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-        <h2 class="text-lg font-bold text-slate-900">Senarai Inovasi Saya</h2>
-        <span class="text-xs text-slate-500">Auto dari Google Sheets</span>
-      </div>
+    <table style="margin-top:10px;">
+      <thead><tr><th>Tajuk</th><th>Kategori</th><th>Status</th><th>MyIPO</th></tr></thead>
+      <tbody id="reportBody">
+        <tr><td colspan="4" class="muted">Klik "Generate Report 2026".</td></tr>
+      </tbody>
+    </table>
 
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-slate-50 text-slate-600">
-            <tr>
-              <th class="text-left py-3 px-4">Tajuk</th>
-              <th class="text-left py-3 px-4">Tahun</th>
-              <th class="text-left py-3 px-4">Kategori</th>
-              <th class="text-left py-3 px-4">Status</th>
-              <th class="text-left py-3 px-4">MyIPO</th>
-              <th class="text-left py-3 px-4">ID</th>
-            </tr>
-          </thead>
-          <tbody id="tblBody"></tbody>
-        </table>
-      </div>
-
-      <details class="px-6 py-4 border-t border-slate-200">
-        <summary class="cursor-pointer text-sm text-slate-600">Debug output (kalau nak tengok JSON)</summary>
-        <pre id="debugJson" class="mt-3 text-xs bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-auto"></pre>
-      </details>
-    </div>
-
-    <!-- Report Area (this is what gets printed) -->
-    <div class="mt-8" id="reportArea"></div>
-
-    <div class="mt-10 text-xs text-slate-400">
-      © 2026 kurakurahijau.com
+    <div class="muted" style="margin-top:10px;">
+      Nota: Report ini memaparkan inovasi tahun 2026 berdasarkan rekod yang didaftarkan oleh ahli kumpulan / ketua kumpulan.
     </div>
   </div>
 </body>
