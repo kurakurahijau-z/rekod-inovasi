@@ -362,3 +362,33 @@ function escapeHtml(s){
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[m]));
 }
+// ===== Add Competition =====
+
+async function addCompetitionInit() {
+  requireAuthOrRedirect();
+}
+
+async function submitCompetition(e) {
+  e.preventDefault();
+
+  const token = getToken();
+
+  const payload = {
+    namaEvent: qs("#namaEvent").value.trim(),
+    tahun: qs("#tahun").value.trim(),
+    peringkat: qs("#peringkat").value.trim(),
+    pingat: qs("#pingat").value.trim()
+  };
+
+  qs("#msg").textContent = "Saving…";
+
+  const r = await apiPost("addCompetition", { token }, payload);
+
+  if (!r.ok) {
+    qs("#msg").textContent = "Gagal: " + (r.error || "");
+    return;
+  }
+
+  qs("#msg").textContent = "Berjaya simpan ✅";
+  setTimeout(()=> location.href="./dashboard.html", 800);
+}
