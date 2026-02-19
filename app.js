@@ -93,7 +93,11 @@ async function dashboardInit() {
 
   await refreshMyInnovations();
   await refreshReport("2026");
-  await refreshCompetitionReport("2026");
+
+  // optional: kalau dashboard kau ada section competitions
+  if (qs("#compBody")) {
+    await refreshCompetitionReport("2026");
+  }
 }
 
 async function refreshMyInnovations() {
@@ -204,7 +208,7 @@ async function refreshReport(year) {
 }
 
 /* =========================
-   COMPETITIONS (Dashboard)
+   COMPETITIONS (Dashboard optional)
 ========================= */
 
 async function refreshCompetitionReport(year){
@@ -219,7 +223,6 @@ async function refreshCompetitionReport(year){
   const s = r.summary || {};
   const items = r.items || [];
 
-  // top KPIs
   const elTotal = qs("#cTotal");
   const elAK = qs("#cAK");
   const elGold = qs("#cGold");
@@ -230,24 +233,25 @@ async function refreshCompetitionReport(year){
   if (elGold) elGold.textContent = (s.medals && s.medals.Gold) ? s.medals.Gold : 0;
   if (elIntl) elIntl.textContent = (s.peringkat && s.peringkat.Antarabangsa) ? s.peringkat.Antarabangsa : 0;
 
-  // table
   const tb = qs("#compBody");
   if (!tb) return;
 
   tb.innerHTML = "";
   if (!items.length){
-    tb.innerHTML = `<tr><td colspan="5" class="muted">Belum ada rekod penyertaan untuk tahun ${escapeHtml(String(r.year||year))}.</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="6" class="muted">Belum ada rekod penyertaan untuk tahun ${escapeHtml(String(r.year||year))}.</td></tr>`;
     return;
   }
 
   for (const it of items){
     const ak = normalizeYesNo(it.anugerahKhas) === "yes" ? "Ya" : "Tidak";
+    const nak = it.namaAnugerahKhas ? String(it.namaAnugerahKhas) : "";
     tb.innerHTML += `
       <tr>
         <td>${escapeHtml(it.tajuk||"")}</td>
+        <td>${escapeHtml(it.namaEvent||"")}</td>
         <td>${escapeHtml(it.peringkat||"")}</td>
         <td>${escapeHtml(it.pingat||"")}</td>
-        <td>${escapeHtml(ak)}</td>
+        <td>${escapeHtml(ak)} ${nak ? `<div class="muted" style="font-size:12px;">${escapeHtml(nak)}</div>` : ""}</td>
         <td><code>${escapeHtml(it.innovationId||"")}</code></td>
       </tr>
     `;
@@ -308,7 +312,25 @@ async function addCompetitionInit(){
   const elEmail = qs("#meEmail");
   if (elEmail) elEmail.textContent = me.email;
 
-  // load innovations for dropdown
+  // footer year (if exists)
+  const yy = qs("#yy");
+  if (yy) yy.textContent = new Date().getFullYear();
+
+  // toggle anugerah khas box
+  const akSel = qs("#anugerahKhas");
+  const box = qs("#anugerahBox");
+  const nama = qs("#namaAnugerahKhas");
+  if (akSel && box) {
+    const sync = () => {
+      const v = String(akSel.value || "no").toLowerCase();
+      if (v === "yes") { box.classList.remove("hide"); if (nama) nama.required = true; }
+      else { box.classList.add("hide"); if (nama) { nama.required = false; nama.value = ""; } }
+    };
+    akSel.addEventListener("change", sync);
+    sync();
+  }
+
+  // load innovations for dropdown (owner + member)
   const token = getToken();
   const r = await apiGet("listMyInnovations", { token });
   const sel = qs("#innovationId");
@@ -337,10 +359,12 @@ async function submitCompetition(e){
 
   const payload = {
     innovationId: qs("#innovationId").value.trim(),
+    namaEvent: qs("#namaEvent").value.trim(),
     tahun: qs("#tahun").value.trim(),
     peringkat: qs("#peringkat").value.trim(),
     pingat: qs("#pingat").value.trim(),
-    anugerahKhas: qs("#anugerahKhas").value.trim()
+    anugerahKhas: qs("#anugerahKhas").value.trim(),
+    namaAnugerahKhas: (qs("#namaAnugerahKhas") ? qs("#namaAnugerahKhas").value.trim() : "")
   };
 
   const msg = qs("#saveMsg");
@@ -353,7 +377,7 @@ async function submitCompetition(e){
   }
 
   if (msg) msg.textContent = "Berjaya simpan ✅";
-  setTimeout(()=> location.href="./dashboard.html", 600);
+  setTimeout(()=> location.href="./dashboard.html", 700);
 }
 
 // ===== util =====
@@ -361,34 +385,4 @@ function escapeHtml(s){
   return String(s||"").replace(/[&<>"']/g, m => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[m]));
-}
-// ===== Add Competition =====
-
-async function addCompetitionInit() {
-  requireAuthOrRedirect();
-}
-
-async function submitCompetition(e) {
-  e.preventDefault();
-
-  const token = getToken();
-
-  const payload = {
-    namaEvent: qs("#namaEvent").value.trim(),
-    tahun: qs("#tahun").value.trim(),
-    peringkat: qs("#peringkat").value.trim(),
-    pingat: qs("#pingat").value.trim()
-  };
-
-  qs("#msg").textContent = "Saving…";
-
-  const r = await apiPost("addCompetition", { token }, payload);
-
-  if (!r.ok) {
-    qs("#msg").textContent = "Gagal: " + (r.error || "");
-    return;
-  }
-
-  qs("#msg").textContent = "Berjaya simpan ✅";
-  setTimeout(()=> location.href="./dashboard.html", 800);
 }
