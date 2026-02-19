@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Urus Ahli Kumpulan</title>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <style>
+    :root{ --line:#e5e7eb; --muted:#64748b; --bg:#f8fafc; --text:#0f172a; }
+    body{ margin:0; font-family:ui-sans-serif,system-ui,-apple-system; background:var(--bg); color:var(--text); }
+    .wrap{ max-width:920px; margin:24px auto; padding:0 18px; }
+    .top{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+    .muted{ color:var(--muted); font-size:13px; }
+    .card{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:18px; }
+    label{ display:block; margin-top:12px; font-weight:800; font-size:13px; color:#334155; }
+    input,select{
+      width:100%; padding:10px 12px; border:1px solid var(--line);
+      border-radius:12px; margin-top:6px; font-size:14px; background:white;
+    }
+    .row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .btn{
+      padding:10px 14px; border-radius:12px; border:1px solid var(--line);
+      background:#0f172a; color:white; font-weight:900; cursor:pointer;
+    }
+    .btn.secondary{ background:white; color:#0f172a; }
+    table{ width:100%; border-collapse:collapse; margin-top:12px; background:white; border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+    th,td{ padding:10px 12px; border-bottom:1px solid var(--line); font-size:14px; text-align:left; vertical-align:top; }
+    th{ background:#f1f5f9; font-size:13px; color:#334155; }
+    .pill{ padding:4px 10px; border-radius:999px; font-size:12px; font-weight:900; display:inline-block; }
+    .pill.ok{ background:#dcfce7; color:#166534; }
+    .danger{ color:#b91c1c; font-weight:900; cursor:pointer; }
+    .footer{ margin-top:18px; text-align:center; color:var(--muted); font-size:12px; }
+  </style>
+</head>
+
+<body onload="teamInit()">
+  <div class="wrap">
+
+    <div class="top">
+      <div class="muted">Login: <b id="meEmail">-</b></div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn secondary" onclick="location.href='./dashboard.html'">← Dashboard</button>
+        <button class="btn secondary" onclick="doLogout()">Logout</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 6px;">Urus Ahli Kumpulan</h2>
+      <div class="muted">Pilih inovasi (owner) dan tambah email ahli. Lepas tu ahli boleh nampak inovasi tu bila login.</div>
+
+      <label>Pilih Inovasi (yang anda owner)</label>
+      <select id="teamInnovationId" required>
+        <option value="">Loading…</option>
+      </select>
+
+      <div class="row">
+        <div>
+          <label>Email Ahli</label>
+          <input id="memberEmail" placeholder="contoh: ali@pms.edu.my" />
+        </div>
+        <div>
+          <label>Nama Ahli (optional)</label>
+          <input id="memberName" placeholder="contoh: En Ali bin Abu" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Peranan dalam kumpulan</label>
+          <select id="roleInTeam">
+            <option value="member">member</option>
+            <option value="leader">leader</option>
+            <option value="co-leader">co-leader</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end;">
+          <button class="btn" style="width:100%;" onclick="addMember()">+ Tambah Ahli</button>
+        </div>
+      </div>
+
+      <div id="teamMsg" class="muted" style="margin-top:10px;"></div>
+
+      <h3 style="margin:18px 0 6px;">Senarai Ahli</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Nama</th>
+            <th>Role</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="teamBody">
+          <tr><td colspan="4" class="muted">Pilih inovasi untuk lihat ahli.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="footer">© <span id="yy"></span> kurakurahijau.com</div>
+  </div>
+
+  <script>
+    document.getElementById('yy').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
