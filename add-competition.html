@@ -3,123 +3,60 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tambah Penyertaan - Rekod Inovasi</title>
-
+  <title>Tambah Penyertaan</title>
   <script src="config.js"></script>
   <script src="app.js"></script>
-
   <style>
-    :root{ --line:#e5e7eb; --muted:#64748b; --bg:#f8fafc; --text:#0f172a; --card:#fff; }
-    body{ margin:0; font-family: ui-sans-serif,system-ui,-apple-system; background:var(--bg); color:var(--text); }
-    .wrap{ max-width:820px; margin:24px auto; padding:0 18px; }
-    .top{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
-    .muted{ color:var(--muted); font-size:13px; }
-    .card{ background:var(--card); border:1px solid var(--line); border-radius:18px; padding:18px; margin-top:14px; }
-    .btn{
-      border:1px solid var(--line); background:white; padding:10px 14px; border-radius:12px;
-      cursor:pointer; font-weight:800;
-    }
-    .btn.primary{ background:#0f172a; color:white; border-color:#0f172a; }
-    label{ font-size:13px; color:#334155; font-weight:800; display:block; margin-top:10px; }
+    body{font-family:ui-sans-serif,system-ui;background:#f8fafc;margin:0}
+    .wrap{max-width:800px;margin:40px auto;padding:0 20px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:20px}
+    label{display:block;margin-top:12px;font-weight:700;font-size:14px}
     input,select{
-      width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:12px; margin-top:6px;
-      font-size:14px; background:white;
+      width:100%;padding:10px;border:1px solid #e5e7eb;
+      border-radius:10px;margin-top:6px;font-size:14px
     }
-    .row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    .note{ background:#f1f5f9; border:1px dashed #cbd5e1; padding:12px; border-radius:14px; margin-top:10px; }
-    .footer{ margin-top:18px; text-align:center; font-size:12px; color:#94a3b8; }
+    .btn{
+      margin-top:18px;padding:10px 16px;
+      background:#0f172a;color:white;
+      border:none;border-radius:10px;font-weight:700;cursor:pointer
+    }
+    .muted{color:#64748b;font-size:13px;margin-top:10px}
   </style>
 </head>
 
-<body onload="competitionInit()">
+<body onload="addCompetitionInit()">
   <div class="wrap">
-    <div class="top">
-      <div class="muted">Login: <b id="meEmail">-</b></div>
-      <div style="display:flex; gap:10px; align-items:center;">
-        <button class="btn" onclick="location.href='./dashboard.html'">← Dashboard</button>
-        <button class="btn" onclick="doLogout()">Logout</button>
-      </div>
-    </div>
-
     <div class="card">
-      <h2 style="margin:0 0 6px;">Tambah Penyertaan</h2>
-      <div class="muted">
-        Page ni untuk rekod penyertaan pertandingan / event (contoh: iCOVEx, NIICE, dll).
-        <br/>Aku buat versi “safe” dulu supaya tak 404. Backend kita sambung kemudian.
-      </div>
+      <h2>Tambah Penyertaan</h2>
 
-      <div class="note">
-        <b>Status:</b> “UI siap, simpan data belum diaktifkan”.
-        <br/>Bila kau dah ready, baru kita tambah action baru kat Apps Script (tanpa kacau login).
-      </div>
+      <form onsubmit="submitCompetition(event)">
+        <label>Nama Event</label>
+        <input id="namaEvent" required />
 
-      <form onsubmit="event.preventDefault(); alert('Sementara ni belum simpan (backend belum diaktifkan).');">
-        <label>Nama Pertandingan / Program</label>
-        <input id="compName" placeholder="contoh: iCOVEx 2026" required />
+        <label>Tahun</label>
+        <input id="tahun" value="2026" required />
 
-        <div class="row">
-          <div>
-            <label>Tahun</label>
-            <input id="compYear" value="2026" required />
-          </div>
-          <div>
-            <label>Peringkat</label>
-            <select id="compLevel" required>
-              <option value="">-- pilih --</option>
-              <option>DALAMAN</option>
-              <option>DAERAH</option>
-              <option>NEGERI</option>
-              <option>KEBANGSAAN</option>
-              <option>ANTARABANGSA</option>
-            </select>
-          </div>
-        </div>
+        <label>Peringkat</label>
+        <select id="peringkat" required>
+          <option value="">-- pilih --</option>
+          <option>DALAMAN</option>
+          <option>KEBANGSAAN</option>
+          <option>ANTARABANGSA</option>
+        </select>
 
-        <div class="row">
-          <div>
-            <label>Keputusan</label>
-            <select id="compResult" required>
-              <option value="">-- pilih --</option>
-              <option>PENYERTAAN</option>
-              <option>FINALIS</option>
-              <option>EMAS</option>
-              <option>PERAK</option>
-              <option>GANGSA</option>
-              <option>ANUGERAH KHAS</option>
-            </select>
-          </div>
-          <div>
-            <label>Nombor/Sijil (optional)</label>
-            <input id="compCert" placeholder="contoh: CERT-12345" />
-          </div>
-        </div>
+        <label>Pingat / Keputusan</label>
+        <select id="pingat" required>
+          <option value="">-- pilih --</option>
+          <option>EMAS</option>
+          <option>PERAK</option>
+          <option>GANGSA</option>
+          <option>PENYERTAAN</option>
+        </select>
 
-        <button class="btn primary" type="submit" style="margin-top:14px;">Simpan (Coming Soon)</button>
-        <div class="muted" style="margin-top:10px;">
-          Note: Butang simpan ni belum hantar ke Apps Script lagi — hanya untuk elak 404 & siapkan flow.
-        </div>
+        <button class="btn" type="submit">Simpan</button>
+        <div id="msg" class="muted"></div>
       </form>
     </div>
-
-    <div class="footer">© <span id="yy"></span> kurakurahijau.com</div>
   </div>
-
-  <script>
-    async function competitionInit(){
-      // guna function sedia ada dalam app.js — tak ubah login langsung
-      try{
-        requireAuthOrRedirect();
-        const me = await loadMe();
-        if (!me) return;
-        const el = document.querySelector("#meEmail");
-        if (el) el.textContent = me.email;
-        document.querySelector("#yy").textContent = new Date().getFullYear();
-      }catch(e){
-        // kalau apa-apa jadi, bounce balik login (standard flow)
-        clearToken();
-        location.href="./index.html";
-      }
-    }
-  </script>
 </body>
 </html>
