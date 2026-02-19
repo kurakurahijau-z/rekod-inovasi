@@ -14,7 +14,7 @@
     .who{ color:var(--muted); font-size:14px; }
     .btn{
       border:1px solid var(--line); background:white; padding:10px 14px; border-radius:12px;
-      cursor:pointer; font-weight:700;
+      cursor:pointer; font-weight:800;
     }
     .btn.primary{ background:#0f172a; color:white; border-color:#0f172a; }
     .grid{ display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:14px; margin-top:16px; }
@@ -25,7 +25,7 @@
     table{ width:100%; border-collapse:collapse; background:white; border:1px solid var(--line); border-radius:16px; overflow:hidden; }
     th,td{ padding:10px 12px; border-bottom:1px solid var(--line); font-size:14px; text-align:left; vertical-align:top; }
     th{ background:#f1f5f9; font-size:13px; color:#334155; }
-    .pill{ padding:4px 10px; border-radius:999px; font-size:12px; font-weight:800; display:inline-block; }
+    .pill{ padding:4px 10px; border-radius:999px; font-size:12px; font-weight:900; display:inline-block; }
     .pill.ok{ background:#dcfce7; color:#166534; }
     .pill.warn{ background:#fef9c3; color:#854d0e; }
     .muted{ color:var(--muted); }
@@ -62,19 +62,18 @@
       </div>
 
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <button class="btn" onclick="refreshMyInnovations()">Refresh</button>
-
-        <!-- ✅ NEW: Urus ahli kumpulan -->
-        <button class="btn" onclick="location.href='./team.html'">Urus Ahli</button>
-
-        <button class="btn" onclick="refreshReport('2026')">Report Inovasi 2026</button>
-        <button class="btn" onclick="refreshCompetitionReport('2026')">Report Pertandingan 2026</button>
-
-        <button class="btn" onclick="doPrint()">Print / Save PDF</button>
-
+        <!-- FLOW KERJA (primary dulu) -->
         <button class="btn primary" onclick="location.href='./add-innovation.html'">+ Tambah Inovasi</button>
+        <button class="btn primary" onclick="location.href='./team.html'">Urus Ahli</button>
         <button class="btn primary" onclick="location.href='./add-competition.html'">+ Tambah Penyertaan</button>
 
+        <!-- laporan kemudian -->
+        <button class="btn" onclick="refreshReport('2026')">Report Inovasi 2026</button>
+        <button class="btn" onclick="refreshCompetitionReport('2026')">Report Pertandingan 2026</button>
+        <button class="btn" onclick="doPrint()">Print / Save PDF</button>
+
+        <!-- util last -->
+        <button class="btn" onclick="refreshMyInnovations()">Refresh</button>
         <button class="btn" onclick="doLogout()">Logout</button>
       </div>
     </div>
@@ -127,10 +126,17 @@
 
     <table style="margin-top:10px;">
       <thead>
-        <tr><th>Tajuk Inovasi</th><th>Peringkat</th><th>Pingat</th><th>Anugerah Khas</th><th>Innovation ID</th></tr>
+        <tr>
+          <th>Tajuk Inovasi</th>
+          <th>Nama Event</th>
+          <th>Peringkat</th>
+          <th>Pingat</th>
+          <th>Anugerah Khas</th>
+          <th>Innovation ID</th>
+        </tr>
       </thead>
       <tbody id="compBody">
-        <tr><td colspan="5" class="muted">Klik "Report Pertandingan 2026".</td></tr>
+        <tr><td colspan="6" class="muted">Klik "Report Pertandingan 2026".</td></tr>
       </tbody>
     </table>
 
