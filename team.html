@@ -7,30 +7,31 @@
   <script src="config.js"></script>
   <script src="app.js"></script>
   <style>
-    :root{ --line:#e5e7eb; --muted:#64748b; --bg:#f8fafc; --text:#0f172a; }
-    body{ margin:0; font-family:ui-sans-serif,system-ui; background:var(--bg); color:var(--text); }
-    .wrap{ max-width:900px; margin:34px auto; padding:0 18px; }
-    .top{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
-    .muted{ color:var(--muted); font-size:13px; }
-    .btn{
-      border:1px solid var(--line); background:white; padding:10px 14px; border-radius:12px;
-      cursor:pointer; font-weight:800;
-    }
-    .btn.primary{ background:#0f172a; color:white; border-color:#0f172a; }
-    .card{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:18px; margin-top:12px; }
-    label{ display:block; margin-top:12px; font-weight:900; font-size:13px; color:#334155; }
+    body{font-family:ui-sans-serif,system-ui;background:#f8fafc;margin:0;color:#0f172a}
+    .wrap{max-width:980px;margin:40px auto;padding:0 20px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:20px}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+    .muted{color:#64748b;font-size:13px}
+    label{display:block;margin-top:12px;font-weight:800;font-size:13px;color:#334155}
     input,select{
-      width:100%; padding:10px 12px; border:1px solid var(--line);
-      border-radius:12px; margin-top:6px; font-size:14px; background:white;
+      width:100%;padding:10px;border:1px solid #e5e7eb;
+      border-radius:12px;margin-top:6px;font-size:14px;background:#fff
     }
-    .row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    table{ width:100%; border-collapse:collapse; margin-top:12px; border:1px solid var(--line); border-radius:16px; overflow:hidden; background:white; }
-    th,td{ padding:10px 12px; border-bottom:1px solid var(--line); font-size:14px; text-align:left; }
-    th{ background:#f1f5f9; font-size:13px; color:#334155; }
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .btn{
+      margin-top:14px;padding:10px 14px;border-radius:12px;
+      border:1px solid #0f172a;background:#0f172a;color:#fff;font-weight:900;cursor:pointer
+    }
+    .btn.light{background:#fff;color:#0f172a;border-color:#e5e7eb}
+    table{width:100%;border-collapse:collapse;margin-top:14px;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;background:#fff}
+    th,td{padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:left;vertical-align:top}
+    th{background:#f1f5f9;font-size:13px;color:#334155}
+    .linkDanger{background:none;border:none;color:#b91c1c;font-weight:900;cursor:pointer}
     .footer{
-      text-align:center; font-size:12px; color:#64748b;
-      margin-top:18px; padding:12px 0; border-top:1px solid #e5e7eb;
+      text-align:center;font-size:12px;color:#64748b;margin-top:18px;padding:12px 0;border-top:1px solid #e5e7eb;
     }
+    .toggle{display:flex;align-items:center;gap:10px;margin-top:12px}
+    .toggle input{width:auto;margin:0}
   </style>
 </head>
 
@@ -38,62 +39,97 @@
   <div class="wrap">
     <div class="top">
       <div class="muted">Login: <b id="meEmail">-</b></div>
-      <div style="display:flex;gap:10px;">
-        <button class="btn" onclick="location.href='./dashboard.html'">← Dashboard</button>
-        <button class="btn" onclick="doLogout()">Logout</button>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button class="btn light" onclick="location.href='./dashboard.html'">← Dashboard</button>
+        <button class="btn light" onclick="doLogout()">Logout</button>
       </div>
     </div>
 
     <div class="card">
-      <h2 style="margin:0 0 4px;">Urus Ahli Kumpulan</h2>
-      <div class="muted">Pilih inovasi (owner) dan tambah email ahli. Nama akan auto keluar jika ada dalam StaffDirectory.</div>
+      <h2 style="margin:0 0 6px;">Urus Ahli Kumpulan</h2>
+      <div class="muted">Owner/leader boleh tambah ahli. Ahli yang ditambah akan nampak inovasi ini bila login.</div>
 
-      <form onsubmit="addTeamMember(event)">
-        <label>Pilih Inovasi (yang anda owner)</label>
-        <select id="innovationId" required>
-          <option value="">Loading…</option>
-        </select>
+      <label>Pilih Inovasi</label>
+      <select id="innovationId"></select>
 
-        <div class="row">
-          <div>
-            <label>Email Ahli</label>
-            <input id="memberEmail" placeholder="contoh: ali@pms.edu.my" required />
-            <div class="muted" style="margin-top:6px;">Email ahli wajib isi.</div>
-          </div>
-          <div>
-            <label>Nama Ahli (auto jika jumpa)</label>
-            <input id="memberName" placeholder="contoh: Suraini" />
-          </div>
-        </div>
+      <div class="toggle">
+        <input type="checkbox" id="isExternal">
+        <label for="isExternal" style="margin:0;font-weight:900;">Ahli tiada dalam StaffDirectory (External)</label>
+      </div>
+
+      <!-- Directory mode -->
+      <div id="directoryBox">
+        <label>Cari Nama (StaffDirectory)</label>
+        <input id="staffPick" list="staffList" placeholder="Taip nama… pilih dari dropdown" />
+        <datalist id="staffList"></datalist>
 
         <div class="row">
           <div>
-            <label>Peranan dalam kumpulan</label>
-            <select id="memberRole">
-              <option value="member">member</option>
-              <option value="leader">leader</option>
-            </select>
+            <label>Email Ahli (auto)</label>
+            <input id="memberEmail" placeholder="auto-fill lepas pilih nama" />
           </div>
-          <div style="display:flex;align-items:end;">
-            <button class="btn primary" type="submit" style="width:100%;">+ Tambah Ahli</button>
+          <div>
+            <label>Nama Ahli (auto)</label>
+            <input id="memberName" placeholder="auto-fill lepas pilih nama" />
           </div>
         </div>
 
-        <div id="teamMsg" class="muted" style="margin-top:10px;"></div>
-      </form>
+        <label>Jabatan/Unit (auto jika ada)</label>
+        <input id="memberDept" placeholder="contoh: Jabatan Perdagangan / Unit ..." />
+      </div>
+
+      <!-- External mode -->
+      <div id="externalBox" style="display:none;">
+        <div class="row">
+          <div>
+            <label>Email Ahli (External)</label>
+            <input id="memberEmail" placeholder="contoh: ali@domain.com" />
+          </div>
+          <div>
+            <label>Nama Ahli (External)</label>
+            <input id="memberName" placeholder="contoh: Ali Bin Abu" />
+          </div>
+        </div>
+
+        <label>Jabatan/Unit (External) — wajib</label>
+        <input id="memberDept" placeholder="contoh: Jabatan Mekanikal / Industri / Agensi luar" />
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Peranan dalam kumpulan</label>
+          <select id="memberRole">
+            <option value="member">member</option>
+            <option value="coleader">coLeader</option>
+            <option value="leader">leader</option>
+          </select>
+          <div class="muted" style="margin-top:6px;">Tip: kalau nak bagi orang ke-2 boleh tambah ahli, set dia sebagai coLeader.</div>
+        </div>
+        <div style="display:flex;align-items:end;">
+          <button class="btn" style="width:100%;" onclick="teamAddMember(event)">+ Tambah Ahli</button>
+        </div>
+      </div>
+
+      <div id="teamMsg" class="muted" style="margin-top:10px;"></div>
 
       <h3 style="margin:18px 0 8px;">Senarai Ahli</h3>
       <table>
         <thead>
-          <tr><th>Email</th><th>Nama</th><th>Role</th><th>Action</th></tr>
+          <tr>
+            <th>Email</th><th>Nama</th><th>Jabatan/Unit</th><th>Role</th><th>Action</th>
+          </tr>
         </thead>
         <tbody id="teamBody">
-          <tr><td colspan="4" class="muted">Loading…</td></tr>
+          <tr><td colspan="5" class="muted">Loading…</td></tr>
         </tbody>
       </table>
-    </div>
 
-    <div class="footer">© 2026 kurakurahijau.com</div>
+      <div class="footer">© <span id="y"></span> kurakurahijau.com</div>
+    </div>
   </div>
+
+  <script>
+    document.getElementById("y").textContent = new Date().getFullYear();
+  </script>
 </body>
 </html>
