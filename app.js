@@ -22,8 +22,7 @@ async function apiGet(action, params={}) {
 }
 
 /**
- * CORS-safe POST for GitHub Pages -> Apps Script
- * - Use text/plain to avoid preflight
+ * CORS-safe POST (avoid preflight)
  */
 async function apiPost(action, params={}, body={}) {
   const url = new URL(cfg.API_BASE);
@@ -56,8 +55,7 @@ async function loadMe() {
 }
 
 // ===== Google Sign-In callback =====
-// IMPORTANT: backend loginGoogle is GET CORS-safe.
-// We'll call GET to avoid any surprise.
+// backend loginGoogle is GET (CORS safe)
 async function onGoogleCredentialResponse(resp) {
   try {
     qs("#loginStatus").textContent = "Signing in…";
@@ -74,6 +72,14 @@ async function onGoogleCredentialResponse(resp) {
   }
 }
 
+function normalizeYesNo(v){
+  const s = String(v || "").trim().toLowerCase();
+  if (["yes","ya","y","true","1"].includes(s)) return "yes";
+  if (["no","n","tidak","false","0"].includes(s)) return "no";
+  return s;
+}
+function normalizeStatus(v){ return String(v || "").trim().toLowerCase(); }
+
 // ===== Dashboard =====
 async function dashboardInit() {
   requireAuthOrRedirect();
@@ -85,27 +91,9 @@ async function dashboardInit() {
   if (elEmail) elEmail.textContent = me.email;
   if (elRole)  elRole.textContent  = me.role;
 
-  // admin-only section
-  const adminWrap = qs("#adminSection");
-  if (adminWrap) adminWrap.style.display = (me.role === "admin") ? "block" : "none";
-
   await refreshMyInnovations();
   await refreshReport("2026");
-
-  if (me.role === "admin") {
-    await refreshDeptReport("2026");
-  }
-}
-
-function normalizeYesNo(v){
-  const s = String(v || "").trim().toLowerCase();
-  if (s === "yes" || s === "y" || s === "ya") return "yes";
-  if (s === "no" || s === "n" || s === "tidak") return "no";
-  return s; // fallback
-}
-
-function normalizeStatus(v){
-  return String(v || "").trim().toLowerCase();
+  await refreshCompetitionReport("2026");
 }
 
 async function refreshMyInnovations() {
@@ -117,7 +105,6 @@ async function refreshMyInnovations() {
 
   const items = (r.ok ? (r.items || []) : []);
 
-  // KPI (MY)
   const years = new Set();
   let aktifCount = 0;
   let myipoYesCount = 0;
@@ -127,7 +114,6 @@ async function refreshMyInnovations() {
     if (y) years.add(y);
 
     if (normalizeStatus(it.status) === "aktif") aktifCount++;
-
     if (normalizeYesNo(it.myipoStatus) === "yes") myipoYesCount++;
   }
 
@@ -172,21 +158,15 @@ async function refreshReport(year) {
 
   const items = (r.items || []);
 
-  // SUMMARY (MY) - kira dari items (robust)
   let aktif = 0;
   let myipoYes = 0;
   let myipoNo = 0;
 
   for (const it of items) {
     if (normalizeStatus(it.status) === "aktif") aktif++;
-
     const ms = normalizeYesNo(it.myipoStatus);
     if (ms === "yes") myipoYes++;
-    else if (ms === "no") myipoNo++;
-    else {
-      // fallback: kalau kosong, anggap No (ikut logic lama)
-      myipoNo++;
-    }
+    else myipoNo++;
   }
 
   const elYear = qs("#rYear");
@@ -212,7 +192,6 @@ async function refreshReport(year) {
 
   for (const it of items) {
     const myipo = `${it.myipoStatus || ""} / ${it.myipoNumber || ""}`.trim();
-
     tb.innerHTML += `
       <tr>
         <td>${escapeHtml(it.tajuk||"")}</td>
@@ -224,64 +203,58 @@ async function refreshReport(year) {
   }
 }
 
-// ===== ADMIN: Dept Report =====
-async function refreshDeptReport(year){
+/* =========================
+   COMPETITIONS (Dashboard)
+========================= */
+
+async function refreshCompetitionReport(year){
   const token = getToken();
-  const r = await apiGet("generateDeptReport", { token, year });
+  const r = await apiGet("generateCompetitionReport", { token, year });
   if (!r.ok) {
-    const msg = qs("#deptMsg");
-    if (msg) msg.textContent = "Admin report gagal: " + (r.error || "");
+    const m = qs("#cMsg");
+    if (m) m.textContent = "Report pertandingan gagal: " + (r.error || "");
     return;
   }
 
-  const items = (r.items || []);
+  const s = r.summary || {};
+  const items = r.items || [];
 
-  let aktif = 0, myYes = 0, myNo = 0;
-  for (const it of items){
-    if (normalizeStatus(it.status) === "aktif") aktif++;
-    const ms = normalizeYesNo(it.myipoStatus);
-    if (ms === "yes") myYes++;
-    else if (ms === "no") myNo++;
-    else myNo++;
-  }
+  // top KPIs
+  const elTotal = qs("#cTotal");
+  const elAK = qs("#cAK");
+  const elGold = qs("#cGold");
+  const elIntl = qs("#cIntl");
 
-  const elTotal = qs("#dTotal");
-  const elAktif = qs("#dAktif");
-  const elYes = qs("#dMyipoYes");
-  const elNo = qs("#dMyipoNo");
-  const elYear = qs("#dYear");
+  if (elTotal) elTotal.textContent = s.totalPenyertaan ?? items.length;
+  if (elAK) elAK.textContent = s.anugerahKhas ?? 0;
+  if (elGold) elGold.textContent = (s.medals && s.medals.Gold) ? s.medals.Gold : 0;
+  if (elIntl) elIntl.textContent = (s.peringkat && s.peringkat.Antarabangsa) ? s.peringkat.Antarabangsa : 0;
 
-  if (elYear) elYear.textContent = String(r.year || year);
-  if (elTotal) elTotal.textContent = items.length;
-  if (elAktif) elAktif.textContent = aktif;
-  if (elYes) elYes.textContent = myYes;
-  if (elNo) elNo.textContent = myNo;
-
-  const tb = qs("#deptBody");
+  // table
+  const tb = qs("#compBody");
   if (!tb) return;
 
   tb.innerHTML = "";
   if (!items.length){
-    tb.innerHTML = `<tr><td colspan="5" class="muted">Tiada rekod jabatan untuk tahun ${escapeHtml(String(r.year||year))}.</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="5" class="muted">Belum ada rekod penyertaan untuk tahun ${escapeHtml(String(r.year||year))}.</td></tr>`;
     return;
   }
 
   for (const it of items){
-    const myipo = `${it.myipoStatus || ""} / ${it.myipoNumber || ""}`.trim();
-    const pillCls = (normalizeStatus(it.status)==="aktif") ? "ok" : "warn";
+    const ak = normalizeYesNo(it.anugerahKhas) === "yes" ? "Ya" : "Tidak";
     tb.innerHTML += `
       <tr>
-        <td>${escapeHtml(it.ownerEmail||"")}</td>
         <td>${escapeHtml(it.tajuk||"")}</td>
-        <td>${escapeHtml(it.kategori||"")}</td>
-        <td><span class="pill ${pillCls}">${escapeHtml(it.status||"")}</span></td>
-        <td>${escapeHtml(myipo||"")}</td>
+        <td>${escapeHtml(it.peringkat||"")}</td>
+        <td>${escapeHtml(it.pingat||"")}</td>
+        <td>${escapeHtml(ak)}</td>
+        <td><code>${escapeHtml(it.innovationId||"")}</code></td>
       </tr>
     `;
   }
 
-  const msg = qs("#deptMsg");
-  if (msg) msg.textContent = "";
+  const m = qs("#cMsg");
+  if (m) m.textContent = "";
 }
 
 function doPrint() { window.print(); }
@@ -320,6 +293,66 @@ async function submitInnovation(e) {
     return;
   }
   qs("#saveMsg").textContent = "Berjaya simpan ✅";
+  setTimeout(()=> location.href="./dashboard.html", 600);
+}
+
+/* =========================
+   ADD COMPETITION PAGE
+========================= */
+
+async function addCompetitionInit(){
+  requireAuthOrRedirect();
+  const me = await loadMe();
+  if (!me) return;
+
+  const elEmail = qs("#meEmail");
+  if (elEmail) elEmail.textContent = me.email;
+
+  // load innovations for dropdown
+  const token = getToken();
+  const r = await apiGet("listMyInnovations", { token });
+  const sel = qs("#innovationId");
+  if (!sel) return;
+
+  sel.innerHTML = `<option value="">-- pilih inovasi --</option>`;
+  const items = (r.ok ? (r.items || []) : []);
+  for (const it of items){
+    const id = String(it.innovationId||"").trim();
+    const tajuk = String(it.tajuk||"").trim();
+    const tahun = String(it.tahun||"").trim();
+    sel.innerHTML += `<option value="${escapeHtml(id)}" data-tahun="${escapeHtml(tahun)}">${escapeHtml(tajuk)} (${escapeHtml(tahun)})</option>`;
+  }
+
+  sel.addEventListener("change", () => {
+    const opt = sel.options[sel.selectedIndex];
+    const y = opt ? (opt.getAttribute("data-tahun") || "") : "";
+    const tahunEl = qs("#tahun");
+    if (tahunEl && y) tahunEl.value = y;
+  });
+}
+
+async function submitCompetition(e){
+  e.preventDefault();
+  const token = getToken();
+
+  const payload = {
+    innovationId: qs("#innovationId").value.trim(),
+    tahun: qs("#tahun").value.trim(),
+    peringkat: qs("#peringkat").value.trim(),
+    pingat: qs("#pingat").value.trim(),
+    anugerahKhas: qs("#anugerahKhas").value.trim()
+  };
+
+  const msg = qs("#saveMsg");
+  if (msg) msg.textContent = "Saving…";
+
+  const r = await apiPost("addCompetition", { token }, payload);
+  if (!r.ok){
+    if (msg) msg.textContent = "Gagal: " + (r.error || "");
+    return;
+  }
+
+  if (msg) msg.textContent = "Berjaya simpan ✅";
   setTimeout(()=> location.href="./dashboard.html", 600);
 }
 
