@@ -8,11 +8,11 @@
   <script src="app.js"></script>
   <style>
     :root{ --line:#e5e7eb; --muted:#64748b; --bg:#f8fafc; --text:#0f172a; }
-    body{ margin:0; font-family:ui-sans-serif,system-ui,-apple-system; background:var(--bg); color:var(--text); }
-    .wrap{ max-width:820px; margin:24px auto; padding:0 18px; }
-    .top{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+    body{ margin:0; font-family:ui-sans-serif,system-ui; background:var(--bg); color:var(--text); }
+    .wrap{ max-width:820px; margin:30px auto; padding:0 18px; }
+    .top{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
     .muted{ color:var(--muted); font-size:13px; }
-    .card{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:18px; }
+    .card{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:18px; margin-top:12px; }
     label{ display:block; margin-top:12px; font-weight:800; font-size:13px; color:#334155; }
     input,select{
       width:100%; padding:10px 12px; border:1px solid var(--line);
@@ -20,37 +20,32 @@
     }
     .row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
     .btn{
-      margin-top:14px; padding:10px 14px; border-radius:12px; border:1px solid var(--line);
-      background:#0f172a; color:white; font-weight:900; cursor:pointer;
+      margin-top:16px; padding:10px 14px; border-radius:12px;
+      border:1px solid var(--line); background:#0f172a; color:white; font-weight:900; cursor:pointer;
     }
-    .btn.secondary{ background:white; color:#0f172a; }
-    .hint{ font-size:12px; color:var(--muted); margin-top:6px; }
-    .footer{ margin-top:18px; text-align:center; color:var(--muted); font-size:12px; }
-    .hide{ display:none; }
+    .btn.light{ background:white; color:#0f172a; }
   </style>
 </head>
 
 <body onload="addCompetitionInit()">
   <div class="wrap">
-
     <div class="top">
       <div class="muted">Login: <b id="meEmail">-</b></div>
-      <div style="display:flex;gap:10px;align-items:center;">
-        <button class="btn secondary" onclick="location.href='./dashboard.html'">← Dashboard</button>
-        <button class="btn secondary" onclick="doLogout()">Logout</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn light" onclick="location.href='./dashboard.html'">← Dashboard</button>
+        <button class="btn light" onclick="doLogout()">Logout</button>
       </div>
     </div>
 
     <div class="card">
-      <h2 style="margin:0 0 6px;">Tambah Penyertaan</h2>
-      <div class="muted">Pilih inovasi dahulu, lepas tu isi maklumat pertandingan / event.</div>
+      <h2 style="margin:0 0 4px;">Tambah Penyertaan</h2>
+      <div class="muted">Pilih inovasi dulu, lepas tu isi butiran penyertaan.</div>
 
       <form onsubmit="submitCompetition(event)">
         <label>Pilih Inovasi</label>
         <select id="innovationId" required>
           <option value="">Loading…</option>
         </select>
-        <div class="hint">Kalau inovasi tak keluar, maknanya email tu belum dimasukkan sebagai ahli dalam TeamMembers untuk inovasi tersebut.</div>
 
         <label>Nama Event</label>
         <input id="namaEvent" placeholder="contoh: iCOVEx 2026" required />
@@ -78,23 +73,24 @@
             <label>Pingat / Keputusan</label>
             <select id="pingat" required>
               <option value="">-- pilih --</option>
+              <option>PLATINUM</option>
               <option>EMAS</option>
               <option>PERAK</option>
               <option>GANGSA</option>
               <option>PENYERTAAN</option>
-              <option>TIADA</option>
             </select>
           </div>
+
           <div>
             <label>Anugerah Khas?</label>
             <select id="anugerahKhas" required>
-              <option value="no">Tidak</option>
-              <option value="yes">Ya</option>
+              <option value="no">no</option>
+              <option value="yes">yes</option>
             </select>
           </div>
         </div>
 
-        <div id="anugerahBox" class="hide">
+        <div id="akNameWrap" style="display:none;">
           <label>Nama Anugerah Khas</label>
           <input id="namaAnugerahKhas" placeholder="contoh: Best Innovation Award" />
         </div>
@@ -103,13 +99,6 @@
         <div id="saveMsg" class="muted" style="margin-top:10px;"></div>
       </form>
     </div>
-
-    <div class="footer">© <span id="yy"></span> kurakurahijau.com</div>
   </div>
-
-  <script>
-    // footer year
-    document.getElementById('yy').textContent = new Date().getFullYear();
-  </script>
 </body>
 </html>
