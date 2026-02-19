@@ -30,7 +30,6 @@
     .pill.warn{ background:#fef9c3; color:#854d0e; }
     .muted{ color:var(--muted); }
 
-    /* Footer (screen center) */
     .footer{
       text-align:center;
       font-size:12px;
@@ -39,8 +38,6 @@
       padding:12px 0;
       border-top:1px solid #e5e7eb;
     }
-
-    /* Print */
     @media print{
       body { background:white; }
       .btn { display:none !important; }
@@ -53,7 +50,6 @@
         margin:0;
       }
     }
-
     @media (max-width:900px){ .grid{ grid-template-columns: repeat(2,1fr);} }
   </style>
 </head>
@@ -66,9 +62,11 @@
       </div>
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <button class="btn" onclick="refreshMyInnovations()">Refresh</button>
-        <button class="btn" onclick="refreshReport('2026')">Report 2026</button>
+        <button class="btn" onclick="refreshReport('2026')">Report Inovasi 2026</button>
+        <button class="btn" onclick="refreshCompetitionReport('2026')">Report Pertandingan 2026</button>
         <button class="btn" onclick="doPrint()">Print / Save PDF</button>
         <button class="btn primary" onclick="location.href='./add-innovation.html'">+ Tambah Inovasi</button>
+        <button class="btn primary" onclick="location.href='./add-competition.html'">+ Tambah Penyertaan</button>
         <button class="btn" onclick="doLogout()">Logout</button>
       </div>
     </div>
@@ -104,7 +102,27 @@
     <table style="margin-top:10px;">
       <thead><tr><th>Tajuk</th><th>Kategori</th><th>Status</th><th>MyIPO</th></tr></thead>
       <tbody id="reportBody">
-        <tr><td colspan="4" class="muted">Klik "Report 2026".</td></tr>
+        <tr><td colspan="4" class="muted">Klik "Report Inovasi 2026".</td></tr>
+      </tbody>
+    </table>
+
+    <!-- COMPETITIONS -->
+    <h2>Penyertaan Pertandingan <span class="muted">(2026)</span></h2>
+    <div class="muted" id="cMsg" style="margin-bottom:8px;"></div>
+
+    <div class="grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="card"><div class="kpiLabel">Jumlah Penyertaan</div><div class="kpiVal" id="cTotal">0</div></div>
+      <div class="card"><div class="kpiLabel">Anugerah Khas</div><div class="kpiVal" id="cAK">0</div></div>
+      <div class="card"><div class="kpiLabel">Gold</div><div class="kpiVal" id="cGold">0</div></div>
+      <div class="card"><div class="kpiLabel">Antarabangsa</div><div class="kpiVal" id="cIntl">0</div></div>
+    </div>
+
+    <table style="margin-top:10px;">
+      <thead>
+        <tr><th>Tajuk Inovasi</th><th>Peringkat</th><th>Pingat</th><th>Anugerah Khas</th><th>Innovation ID</th></tr>
+      </thead>
+      <tbody id="compBody">
+        <tr><td colspan="5" class="muted">Klik "Report Pertandingan 2026".</td></tr>
       </tbody>
     </table>
 
@@ -122,6 +140,5 @@
       document.getElementById("printedYear").textContent = now.getFullYear();
     })();
   </script>
-
 </body>
 </html>
