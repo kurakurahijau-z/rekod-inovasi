@@ -80,16 +80,6 @@ function normalizeYesNo(v){
 }
 function normalizeStatus(v){ return String(v || "").trim().toLowerCase(); }
 
-// ===== STAFF helper =====
-async function lookupStaffName(email){
-  const token = getToken();
-  const e = String(email||"").toLowerCase().trim();
-  if (!e) return "";
-  const r = await apiGet("lookupStaff", { token, email: e });
-  if (!r.ok) return "";
-  return (r.found ? (r.name || "") : "");
-}
-
 // ===== Dashboard =====
 async function dashboardInit() {
   requireAuthOrRedirect();
@@ -229,6 +219,7 @@ async function refreshCompetitionReport(year){
   const s = r.summary || {};
   const items = r.items || [];
 
+  // top KPIs
   const elTotal = qs("#cTotal");
   const elAK = qs("#cAK");
   const elGold = qs("#cGold");
@@ -239,6 +230,7 @@ async function refreshCompetitionReport(year){
   if (elGold) elGold.textContent = (s.medals && s.medals.Gold) ? s.medals.Gold : 0;
   if (elIntl) elIntl.textContent = (s.peringkat && s.peringkat.Antarabangsa) ? s.peringkat.Antarabangsa : 0;
 
+  // table
   const tb = qs("#compBody");
   if (!tb) return;
 
@@ -250,14 +242,15 @@ async function refreshCompetitionReport(year){
 
   for (const it of items){
     const ak = normalizeYesNo(it.anugerahKhas) === "yes" ? "Ya" : "Tidak";
-    const namaAK = (normalizeYesNo(it.anugerahKhas)==="yes") ? (it.namaAnugerahKhas||"") : "";
+    const nak = String(it.namaAnugerahKhas||"").trim();
+
     tb.innerHTML += `
       <tr>
         <td>${escapeHtml(it.tajuk||"")}</td>
         <td>${escapeHtml(it.namaEvent||"")}</td>
         <td>${escapeHtml(it.peringkat||"")}</td>
         <td>${escapeHtml(it.pingat||"")}</td>
-        <td>${escapeHtml(ak)} ${namaAK ? ("- " + escapeHtml(namaAK)) : ""}</td>
+        <td>${escapeHtml(ak)}${nak ? ` — <span class="muted">${escapeHtml(nak)}</span>` : ""}</td>
         <td><code>${escapeHtml(it.innovationId||"")}</code></td>
       </tr>
     `;
@@ -307,81 +300,6 @@ async function submitInnovation(e) {
 }
 
 /* =========================
-   ADD COMPETITION PAGE
-========================= */
-
-async function addCompetitionInit(){
-  requireAuthOrRedirect();
-  const me = await loadMe();
-  if (!me) return;
-
-  const elEmail = qs("#meEmail");
-  if (elEmail) elEmail.textContent = me.email;
-
-  // load innovations for dropdown
-  const token = getToken();
-  const r = await apiGet("listMyInnovations", { token });
-  const sel = qs("#innovationId");
-  if (!sel) return;
-
-  sel.innerHTML = `<option value="">-- pilih inovasi --</option>`;
-  const items = (r.ok ? (r.items || []) : []);
-  for (const it of items){
-    const id = String(it.innovationId||"").trim();
-    const tajuk = String(it.tajuk||"").trim();
-    const tahun = String(it.tahun||"").trim();
-    sel.innerHTML += `<option value="${escapeHtml(id)}" data-tahun="${escapeHtml(tahun)}">${escapeHtml(tajuk)} (${escapeHtml(tahun)})</option>`;
-  }
-
-  sel.addEventListener("change", () => {
-    const opt = sel.options[sel.selectedIndex];
-    const y = opt ? (opt.getAttribute("data-tahun") || "") : "";
-    const tahunEl = qs("#tahun");
-    if (tahunEl && y) tahunEl.value = y;
-  });
-
-  // toggle nama anugerah khas
-  const ak = qs("#anugerahKhas");
-  const akNameWrap = qs("#akNameWrap");
-  if (ak && akNameWrap){
-    const toggle = () => {
-      const v = normalizeYesNo(ak.value);
-      akNameWrap.style.display = (v === "yes") ? "block" : "none";
-      if (v !== "yes") qs("#namaAnugerahKhas").value = "";
-    };
-    ak.addEventListener("change", toggle);
-    toggle();
-  }
-}
-
-async function submitCompetition(e){
-  e.preventDefault();
-  const token = getToken();
-
-  const payload = {
-    innovationId: qs("#innovationId").value.trim(),
-    namaEvent: qs("#namaEvent").value.trim(),
-    tahun: qs("#tahun").value.trim(),
-    peringkat: qs("#peringkat").value.trim(),
-    pingat: qs("#pingat").value.trim(),
-    anugerahKhas: qs("#anugerahKhas").value.trim(),
-    namaAnugerahKhas: qs("#namaAnugerahKhas").value.trim()
-  };
-
-  const msg = qs("#saveMsg");
-  if (msg) msg.textContent = "Saving…";
-
-  const r = await apiPost("addCompetition", { token }, payload);
-  if (!r.ok){
-    if (msg) msg.textContent = "Gagal: " + (r.error || "");
-    return;
-  }
-
-  if (msg) msg.textContent = "Berjaya simpan ✅";
-  setTimeout(()=> location.href="./dashboard.html", 600);
-}
-
-/* =========================
    TEAM PAGE
 ========================= */
 
@@ -393,61 +311,119 @@ async function teamInit(){
   const elEmail = qs("#meEmail");
   if (elEmail) elEmail.textContent = me.email;
 
-  // load my innovations (owner only better, but backend allow owner+member; team management should be owner)
-  const token = getToken();
-  const r = await apiGet("listMyInnovations", { token });
-  const sel = qs("#innovationId");
-  if (!sel) return;
+  await teamLoadMyInnovations_();
+  await teamLoadDirectory_();
+  await teamRefreshList_();
 
-  sel.innerHTML = `<option value="">-- pilih inovasi --</option>`;
-  const items = (r.ok ? (r.items || []) : []);
-  for (const it of items){
-    const id = String(it.innovationId||"").trim();
-    const tajuk = String(it.tajuk||"").trim();
-    const tahun = String(it.tahun||"").trim();
-    sel.innerHTML += `<option value="${escapeHtml(id)}">${escapeHtml(tajuk)} (${escapeHtml(tahun)})</option>`;
+  // toggle external
+  const chk = qs("#isExternal");
+  if (chk){
+    chk.addEventListener("change", () => teamToggleExternal_(chk.checked));
+    teamToggleExternal_(chk.checked);
   }
 
-  sel.addEventListener("change", () => refreshTeamList());
-  await refreshTeamList();
+  // when innovation changes, refresh list
+  const selInv = qs("#innovationId");
+  if (selInv){
+    selInv.addEventListener("change", () => teamRefreshList_());
+  }
 
-  // auto-fill name bila email ditulis
-  const emailInput = qs("#memberEmail");
-  const nameInput = qs("#memberName");
-  if (emailInput && nameInput){
-    let timer = null;
-    emailInput.addEventListener("input", () => {
-      clearTimeout(timer);
-      timer = setTimeout(async () => {
-        const email = emailInput.value.trim();
-        if (!email) return;
-        const name = await lookupStaffName(email);
-        if (name) nameInput.value = name;
-      }, 250);
-    });
+  // when directory choice changes, auto-fill email/name/dept
+  const pick = qs("#staffPick");
+  if (pick){
+    pick.addEventListener("change", () => teamApplyStaffPick_());
+    pick.addEventListener("input", () => teamApplyStaffPick_());
   }
 }
 
-async function refreshTeamList(){
+let __staffDirectory = []; // cached directory
+
+async function teamLoadDirectory_(){
   const token = getToken();
-  const innovationId = qs("#innovationId") ? qs("#innovationId").value.trim() : "";
+  const r = await apiGet("listStaffDirectory", { token });
+  __staffDirectory = (r.ok ? (r.items||[]) : []);
+
+  const dl = qs("#staffList");
+  if (!dl) return;
+
+  dl.innerHTML = "";
+  // datalist option value we use: "Nama — email"
+  for (const it of __staffDirectory){
+    const label = `${it.nama || it.email} — ${it.email}`;
+    const opt = document.createElement("option");
+    opt.value = label;
+    dl.appendChild(opt);
+  }
+}
+
+function teamApplyStaffPick_(){
+  const val = String(qs("#staffPick")?.value || "").trim();
+  if (!val) return;
+
+  // parse "... — email"
+  const parts = val.split("—");
+  const email = parts.length >= 2 ? String(parts[1]||"").trim().toLowerCase() : "";
+
+  const found = email ? __staffDirectory.find(x => String(x.email||"").toLowerCase().trim() === email) : null;
+
+  if (found){
+    if (qs("#memberEmail")) qs("#memberEmail").value = found.email;
+    if (qs("#memberName")) qs("#memberName").value = found.nama || "";
+    const dept = (found.jabatan || found.unit || "").trim();
+    if (qs("#memberDept")) qs("#memberDept").value = dept;
+  } else {
+    // fallback: if user typed email directly
+    if (val.includes("@") && qs("#memberEmail")) qs("#memberEmail").value = val.toLowerCase();
+  }
+}
+
+function teamToggleExternal_(isExternal){
+  const boxExternal = qs("#externalBox");
+  const boxDirectory = qs("#directoryBox");
+  if (boxExternal) boxExternal.style.display = isExternal ? "block" : "none";
+  if (boxDirectory) boxDirectory.style.display = isExternal ? "none" : "block";
+}
+
+async function teamLoadMyInnovations_(){
+  const token = getToken();
+  const r = await apiGet("listMyInnovations", { token });
+  const items = (r.ok ? (r.items||[]) : []);
+
+  const sel = qs("#innovationId");
+  if (!sel) return;
+
+  sel.innerHTML = "";
+  for (const it of items){
+    const opt = document.createElement("option");
+    opt.value = String(it.innovationId||"").trim();
+    opt.textContent = `${it.tajuk || "(no title)"} (${it.tahun || ""})`;
+    sel.appendChild(opt);
+  }
+}
+
+async function teamRefreshList_(){
+  const token = getToken();
+  const innovationId = String(qs("#innovationId")?.value || "").trim();
   const tb = qs("#teamBody");
-  if (tb) tb.innerHTML = "";
+  const msg = qs("#teamMsg");
+  if (msg) msg.textContent = "";
 
   if (!innovationId){
-    if (tb) tb.innerHTML = `<tr><td colspan="4" class="muted">Sila pilih inovasi.</td></tr>`;
+    if (tb) tb.innerHTML = `<tr><td colspan="5" class="muted">Sila pilih inovasi.</td></tr>`;
     return;
   }
 
-  const r = await apiGet("listTeamMembers", { token, innovationId });
+  const r = await apiGet("listMyTeamMembers", { token, innovationId });
   if (!r.ok){
-    if (tb) tb.innerHTML = `<tr><td colspan="4" class="muted">Gagal load ahli: ${escapeHtml(r.error||"")}</td></tr>`;
+    if (tb) tb.innerHTML = `<tr><td colspan="5" class="muted">Tak boleh load ahli: ${escapeHtml(r.error||"")}</td></tr>`;
     return;
   }
 
   const items = r.items || [];
+  if (tb) tb.innerHTML = "";
+
   if (!items.length){
-    if (tb) tb.innerHTML = `<tr><td colspan="4" class="muted">Belum ada ahli.</td></tr>`;
+    if (tb) tb.innerHTML = `<tr><td colspan="5" class="muted">Belum ada ahli.</td></tr>`;
     return;
   }
 
@@ -456,54 +432,82 @@ async function refreshTeamList(){
       <tr>
         <td>${escapeHtml(it.memberEmail||"")}</td>
         <td>${escapeHtml(it.memberName||"")}</td>
-        <td>${escapeHtml(it.role||"")}</td>
-        <td><a href="#" onclick="removeTeam('${escapeHtml(it.teamId||"")}');return false;" style="color:#b91c1c;font-weight:700;">Buang</a></td>
+        <td>${escapeHtml(it.memberDept||"")}</td>
+        <td>${escapeHtml(it.role||"member")}</td>
+        <td><button class="linkDanger" onclick="teamRemoveMember('${escapeHtml(it.innovationId)}','${escapeHtml(it.memberEmail)}')">Buang</button></td>
       </tr>
     `;
   }
 }
 
-async function addTeamMember(e){
+async function teamAddMember(e){
   e.preventDefault();
-  const token = getToken();
 
-  const payload = {
-    innovationId: qs("#innovationId").value.trim(),
-    memberEmail: qs("#memberEmail").value.trim(),
-    memberName: qs("#memberName").value.trim(),
-    role: qs("#memberRole").value.trim()
-  };
+  const token = getToken();
+  const innovationId = String(qs("#innovationId")?.value || "").trim();
+  const isExternal = !!qs("#isExternal")?.checked;
+
+  let memberEmail = String(qs("#memberEmail")?.value || "").trim().toLowerCase();
+  let memberName  = String(qs("#memberName")?.value || "").trim();
+  let memberDept  = String(qs("#memberDept")?.value || "").trim();
+  let role        = String(qs("#memberRole")?.value || "member").trim();
+
+  // If not external, try parse from staffPick
+  if (!isExternal){
+    teamApplyStaffPick_();
+    memberEmail = String(qs("#memberEmail")?.value || "").trim().toLowerCase();
+    memberName  = String(qs("#memberName")?.value || "").trim();
+    memberDept  = String(qs("#memberDept")?.value || "").trim();
+  }
 
   const msg = qs("#teamMsg");
   if (msg) msg.textContent = "Saving…";
 
-  const r = await apiPost("addTeamMember", { token }, payload);
+  const r = await apiPost("addTeamMember", { token }, {
+    innovationId,
+    memberEmail,
+    memberName,
+    memberDept,
+    role
+  });
+
   if (!r.ok){
     if (msg) msg.textContent = "Gagal: " + (r.error || "");
     return;
   }
 
-  if (msg) msg.textContent = "Berjaya tambah ✅";
-  qs("#memberEmail").value = "";
-  qs("#memberName").value = "";
-  qs("#memberRole").value = "member";
-  await refreshTeamList();
+  if (msg) msg.textContent = "Berjaya tambah ahli ✅";
+
+  // clear fields
+  if (qs("#staffPick")) qs("#staffPick").value = "";
+  if (qs("#memberEmail")) qs("#memberEmail").value = "";
+  if (qs("#memberName")) qs("#memberName").value = "";
+  if (qs("#memberDept")) qs("#memberDept").value = "";
+  if (qs("#isExternal")) qs("#isExternal").checked = false;
+  teamToggleExternal_(false);
+
+  await teamRefreshList_();
 }
 
-async function removeTeam(teamId){
+async function teamRemoveMember(innovationId, memberEmail){
+  if (!confirm("Buang ahli ini?")) return;
+
   const token = getToken();
-  const innovationId = qs("#innovationId").value.trim();
-  const r = await apiPost("removeTeamMember", { token }, { teamId, innovationId });
   const msg = qs("#teamMsg");
+  if (msg) msg.textContent = "Deleting…";
+
+  const r = await apiPost("removeTeamMember", { token }, { innovationId, memberEmail });
   if (!r.ok){
     if (msg) msg.textContent = "Gagal buang: " + (r.error || "");
     return;
   }
-  if (msg) msg.textContent = "Dibuang ✅";
-  await refreshTeamList();
+  if (msg) msg.textContent = "Berjaya buang ✅";
+  await teamRefreshList_();
 }
 
-// ===== util =====
+/* =========================
+   util
+========================= */
 function escapeHtml(s){
   return String(s||"").replace(/[&<>"']/g, m => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
