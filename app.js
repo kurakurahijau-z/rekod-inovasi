@@ -55,7 +55,6 @@ async function loadMe() {
 }
 
 // ===== Google Sign-In callback =====
-// backend loginGoogle is GET (CORS safe)
 async function onGoogleCredentialResponse(resp) {
   try {
     qs("#loginStatus").textContent = "Signing in…";
@@ -94,7 +93,6 @@ async function dashboardInit() {
   await refreshMyInnovations();
   await refreshReport("2026");
 
-  // optional: kalau dashboard kau ada section competitions
   if (qs("#compBody")) {
     await refreshCompetitionReport("2026");
   }
@@ -261,47 +259,149 @@ async function refreshCompetitionReport(year){
   if (m) m.textContent = "";
 }
 
-function doPrint() { window.print(); }
+/* =========================
+   TEAM PAGE
+========================= */
 
-function doLogout() {
-  clearToken();
-  location.href = "./index.html";
-}
-
-// ===== Add Innovation =====
-async function addInnovationInit() {
+async function teamInit(){
   requireAuthOrRedirect();
   const me = await loadMe();
   if (!me) return;
+
   const elEmail = qs("#meEmail");
   if (elEmail) elEmail.textContent = me.email;
+
+  const yy = qs("#yy");
+  if (yy) yy.textContent = new Date().getFullYear();
+
+  // Load innovations owned by user only (owner only boleh manage)
+  const token = getToken();
+  const r = await apiGet("listMyInnovations", { token });
+  const sel = qs("#teamInnovationId");
+  if (!sel) return;
+
+  const items = (r.ok ? (r.items || []) : []);
+
+  // filter owner only: backend returns ownerEmail; kalau tak ada, kita still allow by trying listTeamMembers (backend checks)
+  const owned = items.filter(x => String(x.ownerEmail||"").toLowerCase().trim() === String(me.email||"").toLowerCase().trim());
+
+  sel.innerHTML = `<option value="">-- pilih inovasi --</option>`;
+  for (const it of owned){
+    const id = String(it.innovationId||"").trim();
+    const tajuk = String(it.tajuk||"").trim();
+    const tahun = String(it.tahun||"").trim();
+    sel.innerHTML += `<option value="${escapeHtml(id)}">${escapeHtml(tajuk)} (${escapeHtml(tahun)})</option>`;
+  }
+
+  sel.addEventListener("change", () => refreshTeamList());
 }
 
-async function submitInnovation(e) {
-  e.preventDefault();
+async function refreshTeamList(){
   const token = getToken();
+  const innovationId = qs("#teamInnovationId").value.trim();
+  const tb = qs("#teamBody");
+  const msg = qs("#teamMsg");
 
-  const payload = {
-    tajuk: qs("#tajuk").value.trim(),
-    tahun: qs("#tahun").value.trim(),
-    kategori: qs("#kategori").value.trim(),
-    status: qs("#status").value.trim(),
-    myipoStatus: qs("#myipoStatus").value.trim(),
-    myipoNumber: qs("#myipoNumber").value.trim()
-  };
-
-  qs("#saveMsg").textContent = "Saving…";
-  const r = await apiPost("addInnovation", { token }, payload);
-  if (!r.ok) {
-    qs("#saveMsg").textContent = "Gagal: " + (r.error || "");
+  if (!innovationId){
+    if (tb) tb.innerHTML = `<tr><td colspan="4" class="muted">Pilih inovasi untuk lihat ahli.</td></tr>`;
+    if (msg) msg.textContent = "";
     return;
   }
-  qs("#saveMsg").textContent = "Berjaya simpan ✅";
-  setTimeout(()=> location.href="./dashboard.html", 600);
+
+  if (msg) msg.textContent = "Loading ahli…";
+  const r = await apiGet("listTeamMembers", { token, innovationId });
+
+  if (!r.ok){
+    if (msg) msg.textContent = "Gagal: " + (r.error || "");
+    if (tb) tb.innerHTML = `<tr><td colspan="4" class="muted">Tak dapat load ahli.</td></tr>`;
+    return;
+  }
+
+  const items = r.items || [];
+  if (tb) tb.innerHTML = "";
+
+  if (!items.length){
+    if (tb) tb.innerHTML = `<tr><td colspan="4" class="muted">Belum ada ahli lagi.</td></tr>`;
+    if (msg) msg.textContent = "";
+    return;
+  }
+
+  for (const it of items){
+    const role = it.roleInTeam || "member";
+    const pill = role === "owner" ? `<span class="pill ok">owner</span>` : escapeHtml(role);
+
+    tb.innerHTML += `
+      <tr>
+        <td>${escapeHtml(it.memberEmail||"")}</td>
+        <td>${escapeHtml(it.memberName||"")}</td>
+        <td>${pill}</td>
+        <td>
+          ${role === "owner" ? `<span class="muted">-</span>` : `<span class="danger" onclick="removeMember('${escapeHtml(it.memberEmail||"")}')">Buang</span>`}
+        </td>
+      </tr>
+    `;
+  }
+
+  if (msg) msg.textContent = "";
+}
+
+async function addMember(){
+  const token = getToken();
+  const innovationId = qs("#teamInnovationId").value.trim();
+  const memberEmail = qs("#memberEmail").value.trim().toLowerCase();
+  const memberName = qs("#memberName").value.trim();
+  const roleInTeam = qs("#roleInTeam").value.trim();
+
+  const msg = qs("#teamMsg");
+
+  if (!innovationId){
+    if (msg) msg.textContent = "Pilih inovasi dulu.";
+    return;
+  }
+  if (!memberEmail){
+    if (msg) msg.textContent = "Email ahli wajib isi.";
+    return;
+  }
+
+  if (msg) msg.textContent = "Adding…";
+  const r = await apiPost("addTeamMember", { token }, { innovationId, memberEmail, memberName, roleInTeam });
+
+  if (!r.ok){
+    if (msg) msg.textContent = "Gagal: " + (r.error || "");
+    return;
+  }
+
+  qs("#memberEmail").value = "";
+  qs("#memberName").value = "";
+  if (msg) msg.textContent = "Berjaya tambah ✅";
+
+  await refreshTeamList();
+  setTimeout(()=> { if (msg) msg.textContent = ""; }, 900);
+}
+
+async function removeMember(memberEmail){
+  const token = getToken();
+  const innovationId = qs("#teamInnovationId").value.trim();
+  const msg = qs("#teamMsg");
+
+  if (!innovationId) return;
+  if (!confirm(`Buang ahli ini?\n${memberEmail}`)) return;
+
+  if (msg) msg.textContent = "Removing…";
+  const r = await apiPost("removeTeamMember", { token }, { innovationId, memberEmail });
+
+  if (!r.ok){
+    if (msg) msg.textContent = "Gagal: " + (r.error || "");
+    return;
+  }
+
+  if (msg) msg.textContent = "Dibuang ✅";
+  await refreshTeamList();
+  setTimeout(()=> { if (msg) msg.textContent = ""; }, 900);
 }
 
 /* =========================
-   ADD COMPETITION PAGE
+   Add Competition Page (if used)
 ========================= */
 
 async function addCompetitionInit(){
@@ -312,11 +412,9 @@ async function addCompetitionInit(){
   const elEmail = qs("#meEmail");
   if (elEmail) elEmail.textContent = me.email;
 
-  // footer year (if exists)
   const yy = qs("#yy");
   if (yy) yy.textContent = new Date().getFullYear();
 
-  // toggle anugerah khas box
   const akSel = qs("#anugerahKhas");
   const box = qs("#anugerahBox");
   const nama = qs("#namaAnugerahKhas");
@@ -330,7 +428,6 @@ async function addCompetitionInit(){
     sync();
   }
 
-  // load innovations for dropdown (owner + member)
   const token = getToken();
   const r = await apiGet("listMyInnovations", { token });
   const sel = qs("#innovationId");
@@ -378,6 +475,13 @@ async function submitCompetition(e){
 
   if (msg) msg.textContent = "Berjaya simpan ✅";
   setTimeout(()=> location.href="./dashboard.html", 700);
+}
+
+function doPrint() { window.print(); }
+
+function doLogout() {
+  clearToken();
+  location.href = "./index.html";
 }
 
 // ===== util =====
