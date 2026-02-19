@@ -55,6 +55,7 @@ async function loadMe() {
 }
 
 // ===== Google Sign-In callback =====
+// backend loginGoogle is GET (CORS safe)
 async function onGoogleCredentialResponse(resp) {
   try {
     qs("#loginStatus").textContent = "Signing in…";
@@ -79,6 +80,16 @@ function normalizeYesNo(v){
 }
 function normalizeStatus(v){ return String(v || "").trim().toLowerCase(); }
 
+// ===== STAFF helper =====
+async function lookupStaffName(email){
+  const token = getToken();
+  const e = String(email||"").toLowerCase().trim();
+  if (!e) return "";
+  const r = await apiGet("lookupStaff", { token, email: e });
+  if (!r.ok) return "";
+  return (r.found ? (r.name || "") : "");
+}
+
 // ===== Dashboard =====
 async function dashboardInit() {
   requireAuthOrRedirect();
@@ -92,10 +103,7 @@ async function dashboardInit() {
 
   await refreshMyInnovations();
   await refreshReport("2026");
-
-  if (qs("#compBody")) {
-    await refreshCompetitionReport("2026");
-  }
+  await refreshCompetitionReport("2026");
 }
 
 async function refreshMyInnovations() {
@@ -206,7 +214,7 @@ async function refreshReport(year) {
 }
 
 /* =========================
-   COMPETITIONS (Dashboard optional)
+   COMPETITIONS (Dashboard)
 ========================= */
 
 async function refreshCompetitionReport(year){
@@ -242,14 +250,14 @@ async function refreshCompetitionReport(year){
 
   for (const it of items){
     const ak = normalizeYesNo(it.anugerahKhas) === "yes" ? "Ya" : "Tidak";
-    const nak = it.namaAnugerahKhas ? String(it.namaAnugerahKhas) : "";
+    const namaAK = (normalizeYesNo(it.anugerahKhas)==="yes") ? (it.namaAnugerahKhas||"") : "";
     tb.innerHTML += `
       <tr>
         <td>${escapeHtml(it.tajuk||"")}</td>
         <td>${escapeHtml(it.namaEvent||"")}</td>
         <td>${escapeHtml(it.peringkat||"")}</td>
         <td>${escapeHtml(it.pingat||"")}</td>
-        <td>${escapeHtml(ak)} ${nak ? `<div class="muted" style="font-size:12px;">${escapeHtml(nak)}</div>` : ""}</td>
+        <td>${escapeHtml(ak)} ${namaAK ? ("- " + escapeHtml(namaAK)) : ""}</td>
         <td><code>${escapeHtml(it.innovationId||"")}</code></td>
       </tr>
     `;
@@ -259,149 +267,47 @@ async function refreshCompetitionReport(year){
   if (m) m.textContent = "";
 }
 
-/* =========================
-   TEAM PAGE
-========================= */
+function doPrint() { window.print(); }
 
-async function teamInit(){
+function doLogout() {
+  clearToken();
+  location.href = "./index.html";
+}
+
+// ===== Add Innovation =====
+async function addInnovationInit() {
   requireAuthOrRedirect();
   const me = await loadMe();
   if (!me) return;
-
   const elEmail = qs("#meEmail");
   if (elEmail) elEmail.textContent = me.email;
-
-  const yy = qs("#yy");
-  if (yy) yy.textContent = new Date().getFullYear();
-
-  // Load innovations owned by user only (owner only boleh manage)
-  const token = getToken();
-  const r = await apiGet("listMyInnovations", { token });
-  const sel = qs("#teamInnovationId");
-  if (!sel) return;
-
-  const items = (r.ok ? (r.items || []) : []);
-
-  // filter owner only: backend returns ownerEmail; kalau tak ada, kita still allow by trying listTeamMembers (backend checks)
-  const owned = items.filter(x => String(x.ownerEmail||"").toLowerCase().trim() === String(me.email||"").toLowerCase().trim());
-
-  sel.innerHTML = `<option value="">-- pilih inovasi --</option>`;
-  for (const it of owned){
-    const id = String(it.innovationId||"").trim();
-    const tajuk = String(it.tajuk||"").trim();
-    const tahun = String(it.tahun||"").trim();
-    sel.innerHTML += `<option value="${escapeHtml(id)}">${escapeHtml(tajuk)} (${escapeHtml(tahun)})</option>`;
-  }
-
-  sel.addEventListener("change", () => refreshTeamList());
 }
 
-async function refreshTeamList(){
+async function submitInnovation(e) {
+  e.preventDefault();
   const token = getToken();
-  const innovationId = qs("#teamInnovationId").value.trim();
-  const tb = qs("#teamBody");
-  const msg = qs("#teamMsg");
 
-  if (!innovationId){
-    if (tb) tb.innerHTML = `<tr><td colspan="4" class="muted">Pilih inovasi untuk lihat ahli.</td></tr>`;
-    if (msg) msg.textContent = "";
+  const payload = {
+    tajuk: qs("#tajuk").value.trim(),
+    tahun: qs("#tahun").value.trim(),
+    kategori: qs("#kategori").value.trim(),
+    status: qs("#status").value.trim(),
+    myipoStatus: qs("#myipoStatus").value.trim(),
+    myipoNumber: qs("#myipoNumber").value.trim()
+  };
+
+  qs("#saveMsg").textContent = "Saving…";
+  const r = await apiPost("addInnovation", { token }, payload);
+  if (!r.ok) {
+    qs("#saveMsg").textContent = "Gagal: " + (r.error || "");
     return;
   }
-
-  if (msg) msg.textContent = "Loading ahli…";
-  const r = await apiGet("listTeamMembers", { token, innovationId });
-
-  if (!r.ok){
-    if (msg) msg.textContent = "Gagal: " + (r.error || "");
-    if (tb) tb.innerHTML = `<tr><td colspan="4" class="muted">Tak dapat load ahli.</td></tr>`;
-    return;
-  }
-
-  const items = r.items || [];
-  if (tb) tb.innerHTML = "";
-
-  if (!items.length){
-    if (tb) tb.innerHTML = `<tr><td colspan="4" class="muted">Belum ada ahli lagi.</td></tr>`;
-    if (msg) msg.textContent = "";
-    return;
-  }
-
-  for (const it of items){
-    const role = it.roleInTeam || "member";
-    const pill = role === "owner" ? `<span class="pill ok">owner</span>` : escapeHtml(role);
-
-    tb.innerHTML += `
-      <tr>
-        <td>${escapeHtml(it.memberEmail||"")}</td>
-        <td>${escapeHtml(it.memberName||"")}</td>
-        <td>${pill}</td>
-        <td>
-          ${role === "owner" ? `<span class="muted">-</span>` : `<span class="danger" onclick="removeMember('${escapeHtml(it.memberEmail||"")}')">Buang</span>`}
-        </td>
-      </tr>
-    `;
-  }
-
-  if (msg) msg.textContent = "";
-}
-
-async function addMember(){
-  const token = getToken();
-  const innovationId = qs("#teamInnovationId").value.trim();
-  const memberEmail = qs("#memberEmail").value.trim().toLowerCase();
-  const memberName = qs("#memberName").value.trim();
-  const roleInTeam = qs("#roleInTeam").value.trim();
-
-  const msg = qs("#teamMsg");
-
-  if (!innovationId){
-    if (msg) msg.textContent = "Pilih inovasi dulu.";
-    return;
-  }
-  if (!memberEmail){
-    if (msg) msg.textContent = "Email ahli wajib isi.";
-    return;
-  }
-
-  if (msg) msg.textContent = "Adding…";
-  const r = await apiPost("addTeamMember", { token }, { innovationId, memberEmail, memberName, roleInTeam });
-
-  if (!r.ok){
-    if (msg) msg.textContent = "Gagal: " + (r.error || "");
-    return;
-  }
-
-  qs("#memberEmail").value = "";
-  qs("#memberName").value = "";
-  if (msg) msg.textContent = "Berjaya tambah ✅";
-
-  await refreshTeamList();
-  setTimeout(()=> { if (msg) msg.textContent = ""; }, 900);
-}
-
-async function removeMember(memberEmail){
-  const token = getToken();
-  const innovationId = qs("#teamInnovationId").value.trim();
-  const msg = qs("#teamMsg");
-
-  if (!innovationId) return;
-  if (!confirm(`Buang ahli ini?\n${memberEmail}`)) return;
-
-  if (msg) msg.textContent = "Removing…";
-  const r = await apiPost("removeTeamMember", { token }, { innovationId, memberEmail });
-
-  if (!r.ok){
-    if (msg) msg.textContent = "Gagal: " + (r.error || "");
-    return;
-  }
-
-  if (msg) msg.textContent = "Dibuang ✅";
-  await refreshTeamList();
-  setTimeout(()=> { if (msg) msg.textContent = ""; }, 900);
+  qs("#saveMsg").textContent = "Berjaya simpan ✅";
+  setTimeout(()=> location.href="./dashboard.html", 600);
 }
 
 /* =========================
-   Add Competition Page (if used)
+   ADD COMPETITION PAGE
 ========================= */
 
 async function addCompetitionInit(){
@@ -412,22 +318,7 @@ async function addCompetitionInit(){
   const elEmail = qs("#meEmail");
   if (elEmail) elEmail.textContent = me.email;
 
-  const yy = qs("#yy");
-  if (yy) yy.textContent = new Date().getFullYear();
-
-  const akSel = qs("#anugerahKhas");
-  const box = qs("#anugerahBox");
-  const nama = qs("#namaAnugerahKhas");
-  if (akSel && box) {
-    const sync = () => {
-      const v = String(akSel.value || "no").toLowerCase();
-      if (v === "yes") { box.classList.remove("hide"); if (nama) nama.required = true; }
-      else { box.classList.add("hide"); if (nama) { nama.required = false; nama.value = ""; } }
-    };
-    akSel.addEventListener("change", sync);
-    sync();
-  }
-
+  // load innovations for dropdown
   const token = getToken();
   const r = await apiGet("listMyInnovations", { token });
   const sel = qs("#innovationId");
@@ -448,6 +339,19 @@ async function addCompetitionInit(){
     const tahunEl = qs("#tahun");
     if (tahunEl && y) tahunEl.value = y;
   });
+
+  // toggle nama anugerah khas
+  const ak = qs("#anugerahKhas");
+  const akNameWrap = qs("#akNameWrap");
+  if (ak && akNameWrap){
+    const toggle = () => {
+      const v = normalizeYesNo(ak.value);
+      akNameWrap.style.display = (v === "yes") ? "block" : "none";
+      if (v !== "yes") qs("#namaAnugerahKhas").value = "";
+    };
+    ak.addEventListener("change", toggle);
+    toggle();
+  }
 }
 
 async function submitCompetition(e){
@@ -461,7 +365,7 @@ async function submitCompetition(e){
     peringkat: qs("#peringkat").value.trim(),
     pingat: qs("#pingat").value.trim(),
     anugerahKhas: qs("#anugerahKhas").value.trim(),
-    namaAnugerahKhas: (qs("#namaAnugerahKhas") ? qs("#namaAnugerahKhas").value.trim() : "")
+    namaAnugerahKhas: qs("#namaAnugerahKhas").value.trim()
   };
 
   const msg = qs("#saveMsg");
@@ -474,14 +378,129 @@ async function submitCompetition(e){
   }
 
   if (msg) msg.textContent = "Berjaya simpan ✅";
-  setTimeout(()=> location.href="./dashboard.html", 700);
+  setTimeout(()=> location.href="./dashboard.html", 600);
 }
 
-function doPrint() { window.print(); }
+/* =========================
+   TEAM PAGE
+========================= */
 
-function doLogout() {
-  clearToken();
-  location.href = "./index.html";
+async function teamInit(){
+  requireAuthOrRedirect();
+  const me = await loadMe();
+  if (!me) return;
+
+  const elEmail = qs("#meEmail");
+  if (elEmail) elEmail.textContent = me.email;
+
+  // load my innovations (owner only better, but backend allow owner+member; team management should be owner)
+  const token = getToken();
+  const r = await apiGet("listMyInnovations", { token });
+  const sel = qs("#innovationId");
+  if (!sel) return;
+
+  sel.innerHTML = `<option value="">-- pilih inovasi --</option>`;
+  const items = (r.ok ? (r.items || []) : []);
+  for (const it of items){
+    const id = String(it.innovationId||"").trim();
+    const tajuk = String(it.tajuk||"").trim();
+    const tahun = String(it.tahun||"").trim();
+    sel.innerHTML += `<option value="${escapeHtml(id)}">${escapeHtml(tajuk)} (${escapeHtml(tahun)})</option>`;
+  }
+
+  sel.addEventListener("change", () => refreshTeamList());
+  await refreshTeamList();
+
+  // auto-fill name bila email ditulis
+  const emailInput = qs("#memberEmail");
+  const nameInput = qs("#memberName");
+  if (emailInput && nameInput){
+    let timer = null;
+    emailInput.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const email = emailInput.value.trim();
+        if (!email) return;
+        const name = await lookupStaffName(email);
+        if (name) nameInput.value = name;
+      }, 250);
+    });
+  }
+}
+
+async function refreshTeamList(){
+  const token = getToken();
+  const innovationId = qs("#innovationId") ? qs("#innovationId").value.trim() : "";
+  const tb = qs("#teamBody");
+  if (tb) tb.innerHTML = "";
+
+  if (!innovationId){
+    if (tb) tb.innerHTML = `<tr><td colspan="4" class="muted">Sila pilih inovasi.</td></tr>`;
+    return;
+  }
+
+  const r = await apiGet("listTeamMembers", { token, innovationId });
+  if (!r.ok){
+    if (tb) tb.innerHTML = `<tr><td colspan="4" class="muted">Gagal load ahli: ${escapeHtml(r.error||"")}</td></tr>`;
+    return;
+  }
+
+  const items = r.items || [];
+  if (!items.length){
+    if (tb) tb.innerHTML = `<tr><td colspan="4" class="muted">Belum ada ahli.</td></tr>`;
+    return;
+  }
+
+  for (const it of items){
+    tb.innerHTML += `
+      <tr>
+        <td>${escapeHtml(it.memberEmail||"")}</td>
+        <td>${escapeHtml(it.memberName||"")}</td>
+        <td>${escapeHtml(it.role||"")}</td>
+        <td><a href="#" onclick="removeTeam('${escapeHtml(it.teamId||"")}');return false;" style="color:#b91c1c;font-weight:700;">Buang</a></td>
+      </tr>
+    `;
+  }
+}
+
+async function addTeamMember(e){
+  e.preventDefault();
+  const token = getToken();
+
+  const payload = {
+    innovationId: qs("#innovationId").value.trim(),
+    memberEmail: qs("#memberEmail").value.trim(),
+    memberName: qs("#memberName").value.trim(),
+    role: qs("#memberRole").value.trim()
+  };
+
+  const msg = qs("#teamMsg");
+  if (msg) msg.textContent = "Saving…";
+
+  const r = await apiPost("addTeamMember", { token }, payload);
+  if (!r.ok){
+    if (msg) msg.textContent = "Gagal: " + (r.error || "");
+    return;
+  }
+
+  if (msg) msg.textContent = "Berjaya tambah ✅";
+  qs("#memberEmail").value = "";
+  qs("#memberName").value = "";
+  qs("#memberRole").value = "member";
+  await refreshTeamList();
+}
+
+async function removeTeam(teamId){
+  const token = getToken();
+  const innovationId = qs("#innovationId").value.trim();
+  const r = await apiPost("removeTeamMember", { token }, { teamId, innovationId });
+  const msg = qs("#teamMsg");
+  if (!r.ok){
+    if (msg) msg.textContent = "Gagal buang: " + (r.error || "");
+    return;
+  }
+  if (msg) msg.textContent = "Dibuang ✅";
+  await refreshTeamList();
 }
 
 // ===== util =====
