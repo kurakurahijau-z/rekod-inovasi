@@ -60,13 +60,21 @@
       <div class="who">
         Login: <b id="meEmail">-</b> &nbsp; <span class="pill ok" id="meRole">user</span>
       </div>
+
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <button class="btn" onclick="refreshMyInnovations()">Refresh</button>
+
+        <!-- ✅ NEW: Urus ahli kumpulan -->
+        <button class="btn" onclick="location.href='./team.html'">Urus Ahli</button>
+
         <button class="btn" onclick="refreshReport('2026')">Report Inovasi 2026</button>
         <button class="btn" onclick="refreshCompetitionReport('2026')">Report Pertandingan 2026</button>
+
         <button class="btn" onclick="doPrint()">Print / Save PDF</button>
+
         <button class="btn primary" onclick="location.href='./add-innovation.html'">+ Tambah Inovasi</button>
         <button class="btn primary" onclick="location.href='./add-competition.html'">+ Tambah Penyertaan</button>
+
         <button class="btn" onclick="doLogout()">Logout</button>
       </div>
     </div>
