@@ -3,42 +3,61 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tambah Penyertaan</title>
+  <title>Tambah Penyertaan - Rekod Inovasi</title>
+
+  <!-- PENTING: config dulu, baru app.js -->
   <script src="config.js"></script>
   <script src="app.js"></script>
+
   <style>
-    :root{ --line:#e5e7eb; --muted:#64748b; --bg:#f8fafc; --text:#0f172a; }
-    body{ margin:0; font-family:ui-sans-serif,system-ui; background:var(--bg); color:var(--text); }
-    .wrap{ max-width:820px; margin:30px auto; padding:0 18px; }
-    .top{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
-    .muted{ color:var(--muted); font-size:13px; }
-    .card{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:18px; margin-top:12px; }
-    label{ display:block; margin-top:12px; font-weight:800; font-size:13px; color:#334155; }
-    input,select{
-      width:100%; padding:10px 12px; border:1px solid var(--line);
-      border-radius:12px; margin-top:6px; font-size:14px; background:white;
-    }
-    .row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    :root{ --line:#e5e7eb; --muted:#64748b; --card:#fff; --bg:#f8fafc; --text:#0f172a; }
+    body{ margin:0; font-family: ui-sans-serif,system-ui,-apple-system; background:var(--bg); color:var(--text); }
+    .wrap{ max-width:980px; margin:24px auto; padding:0 18px; }
+    .topbar{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+    .who{ color:var(--muted); font-size:14px; }
     .btn{
-      margin-top:16px; padding:10px 14px; border-radius:12px;
-      border:1px solid var(--line); background:#0f172a; color:white; font-weight:900; cursor:pointer;
+      border:1px solid var(--line); background:white; padding:10px 14px; border-radius:12px;
+      cursor:pointer; font-weight:800;
     }
-    .btn.light{ background:white; color:#0f172a; }
+    .btn.primary{ background:#0f172a; color:white; border-color:#0f172a; }
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:18px;
+      max-width:720px;
+      margin:18px auto 0;
+    }
+    h1{ margin:0 0 6px; font-size:24px; }
+    .muted{ color:var(--muted); }
+    label{ display:block; font-size:13px; font-weight:800; margin:12px 0 6px; color:#334155; }
+    input, select{
+      width:100%;
+      border:1px solid var(--line);
+      background:white;
+      padding:10px 12px;
+      border-radius:12px;
+      font-size:14px;
+      outline:none;
+    }
+    .row2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .actions{ margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    @media (max-width:760px){ .row2{ grid-template-columns:1fr; } }
   </style>
 </head>
 
 <body onload="addCompetitionInit()">
   <div class="wrap">
-    <div class="top">
-      <div class="muted">Login: <b id="meEmail">-</b></div>
-      <div style="display:flex;gap:10px;">
-        <button class="btn light" onclick="location.href='./dashboard.html'">← Dashboard</button>
-        <button class="btn light" onclick="doLogout()">Logout</button>
+    <div class="topbar">
+      <div class="who">Login: <b id="meEmail">-</b></div>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button class="btn" onclick="location.href='./dashboard.html'">← Dashboard</button>
+        <button class="btn" onclick="doLogout()">Logout</button>
       </div>
     </div>
 
     <div class="card">
-      <h2 style="margin:0 0 4px;">Tambah Penyertaan</h2>
+      <h1>Tambah Penyertaan</h1>
       <div class="muted">Pilih inovasi dulu, lepas tu isi butiran penyertaan.</div>
 
       <form onsubmit="submitCompetition(event)">
@@ -50,7 +69,7 @@
         <label>Nama Event</label>
         <input id="namaEvent" placeholder="contoh: iCOVEx 2026" required />
 
-        <div class="row">
+        <div class="row2">
           <div>
             <label>Tahun</label>
             <input id="tahun" value="2026" required />
@@ -59,28 +78,27 @@
             <label>Peringkat</label>
             <select id="peringkat" required>
               <option value="">-- pilih --</option>
-              <option>DALAMAN</option>
-              <option>DAERAH</option>
-              <option>NEGERI</option>
-              <option>KEBANGSAAN</option>
-              <option>ANTARABANGSA</option>
+              <option>Internal</option>
+              <option>Daerah</option>
+              <option>Negeri</option>
+              <option>Kebangsaan</option>
+              <option>Antarabangsa</option>
             </select>
           </div>
         </div>
 
-        <div class="row">
+        <div class="row2">
           <div>
             <label>Pingat / Keputusan</label>
             <select id="pingat" required>
               <option value="">-- pilih --</option>
-              <option>PLATINUM</option>
-              <option>EMAS</option>
-              <option>PERAK</option>
-              <option>GANGSA</option>
-              <option>PENYERTAAN</option>
+              <option>None</option>
+              <option>Bronze</option>
+              <option>Silver</option>
+              <option>Gold</option>
+              <option>Platinum</option>
             </select>
           </div>
-
           <div>
             <label>Anugerah Khas?</label>
             <select id="anugerahKhas" required>
@@ -90,13 +108,15 @@
           </div>
         </div>
 
-        <div id="akNameWrap" style="display:none;">
+        <div id="anugerahKhasBox" style="display:none;">
           <label>Nama Anugerah Khas</label>
-          <input id="namaAnugerahKhas" placeholder="contoh: Best Innovation Award" />
+          <input id="namaAnugerahKhas" placeholder="contoh: Diamond Award" />
         </div>
 
-        <button class="btn" type="submit">Simpan</button>
-        <div id="saveMsg" class="muted" style="margin-top:10px;"></div>
+        <div class="actions">
+          <button class="btn primary" type="submit">Simpan</button>
+          <div class="muted" id="saveMsg"></div>
+        </div>
       </form>
     </div>
   </div>
