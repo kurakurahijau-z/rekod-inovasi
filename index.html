@@ -2,251 +2,231 @@
 <html lang="ms">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Rekod Inovasi Jabatan</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-  <script src="./config.js"></script>
-  <script src="./app.js" defer></script>
-
   <style>
-    * { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    * { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    .card { border: 1px solid #e5e7eb; border-radius: 16px; background: #fff; }
+    .muted { color:#6b7280; }
+    .btn { border:1px solid #e5e7eb; border-radius:12px; padding:.6rem 1rem; background:#fff; }
+    .btn-primary { background:#111827; color:#fff; border-color:#111827; }
+    .input { width:100%; border:1px solid #e5e7eb; border-radius:12px; padding:.65rem .85rem; }
+    .tab { padding:.55rem 1rem; border-radius: 999px; border:1px solid #e5e7eb; background:#fff; }
+    .tab.active { background:#111827; color:#fff; border-color:#111827; }
+    .banner { border:1px solid #fecaca; background:#fef2f2; color:#991b1b; border-radius: 12px; padding:.75rem 1rem; }
+    .pill { display:inline-flex; gap:.35rem; align-items:center; border:1px solid #e5e7eb; border-radius:999px; padding:.25rem .6rem; font-size:.85rem; }
   </style>
 </head>
 
-<body class="min-h-screen bg-slate-50">
-  <div class="max-w-6xl mx-auto px-4 py-8">
+<body class="bg-gray-50">
+  <main class="max-w-6xl mx-auto px-4 py-10">
+
     <!-- Header -->
-    <div class="flex items-start justify-between gap-4">
+    <div class="flex items-start justify-between gap-4 mb-6">
       <div class="flex items-center gap-3">
-        <div class="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center font-bold text-emerald-700">RI</div>
+        <div class="w-11 h-11 rounded-2xl bg-emerald-100 flex items-center justify-center font-bold text-emerald-700">
+          RI
+        </div>
         <div>
-          <h1 class="text-xl font-semibold text-slate-900">Rekod Inovasi Jabatan</h1>
-          <p class="text-sm text-slate-500">Log masuk guna akaun rasmi <span class="font-medium">@pms.edu.my</span></p>
+          <h1 class="text-xl font-semibold">Rekod Inovasi Jabatan</h1>
+          <div class="muted text-sm">Log masuk guna akaun rasmi <span class="font-medium">@pms.edu.my</span></div>
         </div>
       </div>
 
       <div class="text-right">
-        <div id="userBox" class="text-sm text-slate-700 hidden">
-          <div class="font-medium" id="userEmail">-</div>
-          <div class="text-xs text-slate-500">role: <span id="userRole">-</span></div>
-        </div>
-        <button id="btnLogout" class="mt-2 hidden px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Logout</button>
+        <div id="userEmail" class="text-sm font-medium"></div>
+        <div id="userRole" class="muted text-xs"></div>
+        <button id="btnLogout" class="btn mt-2 hidden">Logout</button>
       </div>
     </div>
 
-    <!-- Login card -->
-    <div id="loginCard" class="mt-8 bg-white rounded-2xl shadow-sm border p-6">
-      <div class="flex items-start justify-between gap-6 flex-wrap">
-        <div>
-          <h2 class="text-lg font-semibold text-slate-900">Log masuk</h2>
-          <p class="text-sm text-slate-500 mt-1">Klik butang Google di kanan.</p>
-          <div id="loginError" class="hidden mt-3 text-sm text-red-600"></div>
-        </div>
-        <div class="min-w-[260px]">
-          <div id="gsiBtn"></div>
-          <p class="text-xs text-slate-400 mt-2">Nota: Akaun mesti tersenarai dalam <b>StaffDirectory</b>.</p>
-        </div>
-      </div>
-    </div>
+    <!-- Login Card -->
+    <section id="loginView" class="card p-6 max-w-md">
+      <h2 class="text-lg font-semibold mb-1">Login Google</h2>
+      <p class="muted text-sm mb-4">Sistem akan semak email anda wujud dalam <b>StaffDirectory</b> (whitelist).</p>
+
+      <div id="googleBtn"></div>
+
+      <div id="loginMsg" class="muted text-sm mt-4"></div>
+    </section>
 
     <!-- App -->
-    <div id="app" class="hidden mt-6">
-      <div id="globalAlert" class="hidden mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"></div>
+    <section id="appView" class="hidden">
+      <div id="globalMsg" class="banner hidden mb-4"></div>
 
-      <!-- Tabs -->
-      <div class="bg-white rounded-2xl shadow-sm border p-4">
-        <div class="flex items-center gap-2 flex-wrap">
-          <button data-tab="inovasi" class="tabBtn px-4 py-2 rounded-xl text-sm bg-slate-900 text-white">Inovasi</button>
-          <button data-tab="team" class="tabBtn px-4 py-2 rounded-xl text-sm bg-white border hover:bg-slate-50">Team</button>
-          <button data-tab="pertandingan" class="tabBtn px-4 py-2 rounded-xl text-sm bg-white border hover:bg-slate-50">Pertandingan</button>
-          <button data-tab="profil" class="tabBtn px-4 py-2 rounded-xl text-sm bg-white border hover:bg-slate-50">Profil</button>
+      <!-- Selected innovation info -->
+      <div class="card p-5 mb-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="muted text-sm">Inovasi dipilih:</div>
+            <div class="text-base font-semibold" id="selectedInnovationTitle">-</div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button id="btnRefreshAll" class="btn">Refresh</button>
+          </div>
         </div>
 
-        <div class="mt-4 text-sm text-slate-600">
-          <span class="font-medium">Inovasi dipilih:</span>
-          <span id="selectedInnovationLabel" class="ml-2 text-slate-900 font-semibold">-</span>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button class="tab active" data-tab="innovations">Inovasi</button>
+          <button class="tab" data-tab="team">Team</button>
+          <button class="tab" data-tab="competitions">Pertandingan</button>
+          <button class="tab" data-tab="profile">Profil</button>
         </div>
       </div>
 
-      <!-- Panels -->
-      <div class="mt-6 grid grid-cols-1 gap-6">
+      <!-- Innovations Tab -->
+      <section id="tab_innovations" class="card p-6">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-lg font-semibold">Inovasi</h2>
+            <div class="muted text-sm">Pilih inovasi untuk urus Team & Pertandingan.</div>
+          </div>
+          <button id="btnRefreshInnovations" class="btn">Refresh</button>
+        </div>
 
-        <!-- INOVASI -->
-        <section id="panel-inovasi" class="panel bg-white rounded-2xl shadow-sm border p-6">
-          <div class="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h2 class="text-lg font-semibold text-slate-900">Inovasi</h2>
-              <p class="text-sm text-slate-500">Pilih satu inovasi untuk urus Team & Pertandingan.</p>
-            </div>
-            <div class="flex gap-2">
-              <button id="btnRefreshInnovations" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Refresh</button>
-            </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div class="lg:col-span-2">
+            <div id="innovList" class="space-y-3"></div>
           </div>
 
-          <div class="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div class="lg:col-span-2">
-              <div id="innovationsList" class="space-y-3"></div>
+          <div class="card p-5 bg-gray-50">
+            <h3 class="font-semibold mb-3">Tambah Inovasi</h3>
+
+            <div class="space-y-3">
+              <input id="inv_tajuk" class="input" placeholder="Tajuk inovasi" />
+              <input id="inv_tahun" class="input" placeholder="Tahun (cth 2026)" />
+              <input id="inv_kategori" class="input" placeholder="Kategori (cth Produk / Proses)" />
+
+              <div class="grid grid-cols-2 gap-3">
+                <select id="inv_status" class="input">
+                  <option value="aktif">aktif</option>
+                  <option value="tidak aktif">tidak aktif</option>
+                </select>
+
+                <select id="inv_myipo" class="input">
+                  <option value="">MYIPO? (optional)</option>
+                  <option value="yes">yes</option>
+                  <option value="no">no</option>
+                </select>
+              </div>
+
+              <input id="inv_myipoNo" class="input" placeholder="No MYIPO (optional)" />
+
+              <button id="btnAddInnovation" class="btn btn-primary w-full">Simpan Inovasi</button>
+              <div class="muted text-xs">Tip: Lepas simpan, klik kad inovasi untuk set sebagai “inovasi dipilih”.</div>
             </div>
+          </div>
+        </div>
+      </section>
 
-            <div class="lg:col-span-1">
-              <div class="border rounded-2xl p-4 bg-slate-50">
-                <h3 class="font-semibold text-slate-900">Tambah Inovasi</h3>
+      <!-- Team Tab -->
+      <section id="tab_team" class="card p-6 hidden">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-lg font-semibold">Team Members</h2>
+            <div class="muted text-sm">Ahli akan ikut inovasi yang dipilih.</div>
+          </div>
+          <button id="btnRefreshTeam" class="btn">Refresh</button>
+        </div>
 
-                <div class="mt-3 space-y-3">
-                  <input id="in_tajuk" class="w-full px-3 py-2 rounded-xl border" placeholder="Tajuk inovasi" />
-                  <input id="in_tahun" class="w-full px-3 py-2 rounded-xl border" placeholder="Tahun (cth 2026)" />
-                  <input id="in_kategori" class="w-full px-3 py-2 rounded-xl border" placeholder="Kategori (cth Produk / Proses)" />
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div class="lg:col-span-2">
+            <div id="teamList" class="space-y-3"></div>
+          </div>
 
-                  <select id="in_status" class="w-full px-3 py-2 rounded-xl border">
-                    <option value="aktif">aktif</option>
-                    <option value="tidak aktif">tidak aktif</option>
-                  </select>
+          <div class="card p-5 bg-gray-50">
+            <h3 class="font-semibold mb-3">Tambah Team Member</h3>
 
-                  <div class="grid grid-cols-2 gap-3">
-                    <select id="in_myipoStatus" class="w-full px-3 py-2 rounded-xl border">
-                      <option value="">MYIPO? (optional)</option>
-                      <option value="yes">yes</option>
-                      <option value="no">no</option>
-                    </select>
-                    <input id="in_myipoNumber" class="w-full px-3 py-2 rounded-xl border" placeholder="No MYIPO (optional)" />
-                  </div>
+            <div class="space-y-3">
+              <div>
+                <input id="tm_search" class="input" list="staffDatalist" placeholder="Cari staf (nama / email)..." />
+                <datalist id="staffDatalist"></datalist>
+                <div class="muted text-xs mt-1">Tip: taip 2–3 huruf, suggestion akan keluar.</div>
+              </div>
 
-                  <button id="btnAddInnovation" class="w-full px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium">
-                    Simpan Inovasi
-                  </button>
+              <input id="tm_email" class="input" placeholder="memberEmail@pms.edu.my (atau email luar)" />
+              <input id="tm_name" class="input" placeholder="Nama" />
+              <input id="tm_role" class="input" placeholder="Peranan (cth Ketua / Ahli)" />
 
-                  <div id="inovasiMsg" class="hidden text-sm mt-2"></div>
-                </div>
+              <button id="btnAddTeam" class="btn btn-primary w-full">Tambah Member</button>
+
+              <div class="muted text-xs">
+                Kalau staf tak wujud dalam StaffDirectory (bukan Jabatan Perdagangan), isi manual email + nama dan terus simpan.
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- TEAM -->
-        <section id="panel-team" class="panel hidden bg-white rounded-2xl shadow-sm border p-6">
-          <div class="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h2 class="text-lg font-semibold text-slate-900">Team Members</h2>
-              <p class="text-sm text-slate-500">Ahli akan ikut inovasi yang dipilih.</p>
-            </div>
-            <button id="btnRefreshTeam" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Refresh</button>
+      <!-- Competitions Tab -->
+      <section id="tab_competitions" class="card p-6 hidden">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-lg font-semibold">Pertandingan</h2>
+            <div class="muted text-sm">Rekod penyertaan/kejayaan untuk inovasi yang dipilih.</div>
+          </div>
+          <button id="btnRefreshComps" class="btn">Refresh</button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div class="lg:col-span-2">
+            <div id="compList" class="space-y-3"></div>
           </div>
 
-          <div class="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div class="lg:col-span-2">
-              <div id="teamList" class="space-y-3"></div>
-            </div>
+          <div class="card p-5 bg-gray-50">
+            <h3 class="font-semibold mb-3">Tambah Pertandingan</h3>
 
-            <div class="lg:col-span-1">
-              <div class="border rounded-2xl p-4 bg-slate-50">
-                <h3 class="font-semibold text-slate-900">Tambah Team Member</h3>
+            <div class="space-y-3">
+              <input id="cp_event" class="input" placeholder="Nama event" />
+              <input id="cp_tahun" class="input" placeholder="Tahun (cth 2026)" />
+              <input id="cp_peringkat" class="input" placeholder="Peringkat (cth Kebangsaan / Antarabangsa)" />
 
-                <div class="mt-3 space-y-3">
-                  <div>
-                    <input id="tm_search" class="w-full px-3 py-2 rounded-xl border" placeholder="Cari staf (nama / email)..." list="staffDatalist" />
-                    <datalist id="staffDatalist"></datalist>
-                    <p class="text-xs text-slate-400 mt-1">Tip: taip 2–3 huruf, suggestion akan keluar.</p>
-                  </div>
+              <select id="cp_pingat" class="input">
+                <option value="PENYERTAAN">PENYERTAAN</option>
+                <option value="BRONZE">BRONZE</option>
+                <option value="SILVER">SILVER</option>
+                <option value="GOLD">GOLD</option>
+                <option value="PLATINUM">PLATINUM</option>
+              </select>
 
-                  <input id="tm_email" class="w-full px-3 py-2 rounded-xl border" placeholder="memberEmail@pms.edu.my" />
-                  <input id="tm_name" class="w-full px-3 py-2 rounded-xl border" placeholder="Nama" />
-                  <input id="tm_role" class="w-full px-3 py-2 rounded-xl border" placeholder="Peranan (cth Ketua / Ahli)" />
+              <label class="flex items-center gap-2 text-sm">
+                <input id="cp_anugerah" type="checkbox" />
+                Menang anugerah khas
+              </label>
 
-                  <button id="btnAddTeam" class="w-full px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-medium">
-                    Tambah Member
-                  </button>
+              <input id="cp_anugerahNama" class="input hidden" placeholder="Nama anugerah khas (cth Best of Best)" />
 
-                  <div id="teamMsg" class="hidden text-sm mt-2"></div>
-                </div>
+              <button id="btnAddComp" class="btn btn-primary w-full">Simpan Pertandingan</button>
+
+              <div class="muted text-xs">
+                Kalau tick “anugerah khas”, box nama anugerah akan muncul.
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- PERTANDINGAN -->
-        <section id="panel-pertandingan" class="panel hidden bg-white rounded-2xl shadow-sm border p-6">
-          <div class="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h2 class="text-lg font-semibold text-slate-900">Pertandingan</h2>
-              <p class="text-sm text-slate-500">Rekod penyertaan/medal/anugerah khas ikut inovasi dipilih.</p>
-            </div>
-            <button id="btnRefreshComps" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Refresh</button>
-          </div>
+      <!-- Profile Tab -->
+      <section id="tab_profile" class="card p-6 hidden">
+        <h2 class="text-lg font-semibold mb-2">Profil</h2>
+        <div class="muted text-sm mb-4">Maklumat akaun semasa.</div>
 
-          <div class="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div class="lg:col-span-2">
-              <div id="compsList" class="space-y-3"></div>
-            </div>
+        <div class="space-y-2">
+          <div class="pill"><span class="muted">Email:</span> <span id="pf_email"></span></div>
+          <div class="pill"><span class="muted">Role:</span> <span id="pf_role"></span></div>
+        </div>
+      </section>
 
-            <div class="lg:col-span-1">
-              <div class="border rounded-2xl p-4 bg-slate-50">
-                <h3 class="font-semibold text-slate-900">Tambah Pertandingan</h3>
+      <div class="text-center muted text-xs mt-6">© 2026 kurakurahijau.com • v1</div>
+    </section>
+  </main>
 
-                <div class="mt-3 space-y-3">
-                  <input id="cp_event" class="w-full px-3 py-2 rounded-xl border" placeholder="Nama event / pertandingan" />
-                  <input id="cp_tahun" class="w-full px-3 py-2 rounded-xl border" placeholder="Tahun (cth 2026)" />
-
-                  <select id="cp_peringkat" class="w-full px-3 py-2 rounded-xl border">
-                    <option value="">Peringkat...</option>
-                    <option value="Internal">Internal</option>
-                    <option value="Daerah">Daerah</option>
-                    <option value="Negeri">Negeri</option>
-                    <option value="Kebangsaan">Kebangsaan</option>
-                    <option value="Antarabangsa">Antarabangsa</option>
-                  </select>
-
-                  <select id="cp_pingat" class="w-full px-3 py-2 rounded-xl border">
-                    <option value="">Pingat...</option>
-                    <option value="None">Penyertaan / Tiada pingat</option>
-                    <option value="Bronze">Bronze</option>
-                    <option value="Silver">Silver</option>
-                    <option value="Gold">Gold</option>
-                    <option value="Platinum">Platinum</option>
-                  </select>
-
-                  <label class="flex items-center gap-2 text-sm text-slate-700">
-                    <input id="cp_anugerahKhas" type="checkbox" class="w-4 h-4" />
-                    Menang anugerah khas
-                  </label>
-
-                  <input id="cp_namaAnugerahKhas" class="w-full px-3 py-2 rounded-xl border hidden" placeholder="Nama anugerah khas (cth Best of Best)" />
-
-                  <button id="btnAddComp" class="w-full px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium">
-                    Simpan Pertandingan
-                  </button>
-
-                  <div class="text-xs text-slate-500">
-                    Kalau tick “anugerah khas”, box nama anugerah akan muncul.
-                  </div>
-
-                  <div id="compMsg" class="hidden text-sm mt-2"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- PROFIL -->
-        <section id="panel-profil" class="panel hidden bg-white rounded-2xl shadow-sm border p-6">
-          <h2 class="text-lg font-semibold text-slate-900">Profil</h2>
-          <div class="mt-3 text-sm text-slate-700 space-y-2">
-            <div><span class="text-slate-500">Email:</span> <span id="p_email" class="font-medium">-</span></div>
-            <div><span class="text-slate-500">Role:</span> <span id="p_role" class="font-medium">-</span></div>
-            <div><span class="text-slate-500">Token:</span> <span id="p_token" class="font-mono text-xs break-all">-</span></div>
-          </div>
-        </section>
-
-      </div>
-
-      <div class="mt-8 text-center text-xs text-slate-400">
-        © 2026 kurakurahijau.com <span class="mx-2">•</span> v1
-      </div>
-    </div>
-  </div>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
