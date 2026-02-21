@@ -1,130 +1,149 @@
 // app.js
 (function () {
-  const CFG = window.APP_CONFIG;
+  const CFG = window.APP_CONFIG || {};
+  const API_BASE = (CFG.API_BASE || "").trim();
 
-  const $ = (sel) => document.querySelector(sel);
+  // ===== Helpers =====
+  function $(id) { return document.getElementById(id); }
 
-  let proxyFrame = null;
-  let proxyReady = false;
-  const pending = new Map();
-
-  function setStatus(msg, isError) {
-    const el = $("#status");
+  function setStatus(msg, type) {
+    // type: "ok" | "err" | "info"
+    const el = $("statusText");
     if (!el) return;
     el.textContent = msg || "";
-    el.style.color = isError ? "#dc2626" : "#334155";
+    el.style.color = (type === "err") ? "#dc2626" : (type === "ok" ? "#16a34a" : "#334155");
   }
 
-  function createProxyIframe() {
-    proxyFrame = document.createElement("iframe");
-    proxyFrame.src = CFG.PROXY_URL; // loads Proxy.html from Apps Script
-    proxyFrame.style.display = "none";
-    proxyFrame.referrerPolicy = "no-referrer";
-    document.body.appendChild(proxyFrame);
-  }
-
-  window.addEventListener("message", (event) => {
-    // only accept from Apps Script domains
-    // Apps Script iframe origin usually: https://script.google.com OR https://script.googleusercontent.com
-    const okOrigin =
-      event.origin.startsWith("https://script.google.com") ||
-      event.origin.startsWith("https://script.googleusercontent.com");
-
-    if (!okOrigin) return;
-
-    const data = event.data || {};
-    if (data.proxyReady) {
-      proxyReady = true;
-      return;
-    }
-
-    if (!data.rid) return;
-    const resolver = pending.get(data.rid);
-    if (resolver) {
-      pending.delete(data.rid);
-      resolver(data);
-    }
-  });
-
-  function callProxy(action, payload) {
-    return new Promise((resolve, reject) => {
-      if (!proxyFrame || !proxyFrame.contentWindow) {
-        reject(new Error("Proxy iframe not ready"));
-        return;
-      }
-      const rid = "r" + Math.random().toString(16).slice(2) + Date.now();
-      pending.set(rid, (res) => resolve(res));
-
-      // We post to "*" because we don't control exact origin (script.google.com vs script.googleusercontent.com),
-      // security is enforced inside Proxy.html by checking GitHub origin.
-      proxyFrame.contentWindow.postMessage({ rid, action, payload }, "*");
-
-      setTimeout(() => {
-        if (pending.has(rid)) {
-          pending.delete(rid);
-          reject(new Error("Proxy timeout"));
-        }
-      }, 15000);
+  function toQuery(params) {
+    const usp = new URLSearchParams();
+    Object.entries(params || {}).forEach(([k, v]) => {
+      if (v === undefined || v === null) return;
+      usp.set(k, String(v));
     });
+    return usp.toString();
   }
 
-  // Google Identity Services callback
-  async function onGoogleCredentialResponse(response) {
+  async function apiGet(action, params) {
+    if (!API_BASE) throw new Error("API_BASE kosong. Semak config.js (guna URL googleusercontent).");
+
+    const qs = toQuery({ action, ...params });
+    const url = API_BASE + (API_BASE.includes("?") ? "&" : "?") + qs;
+
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 15000);
+
     try {
-      setStatus("Semak akses…", false);
+      const res = await fetch(url, {
+        method: "GET",
+        mode: "cors",
+        cache: "no-store",
+        signal: ctrl.signal
+      });
 
-      const idToken = response && response.credential;
-      if (!idToken) {
-        setStatus("Login gagal: token kosong dari Google", true);
-        return;
-      }
-
-      const res = await callProxy("login", { idToken });
+      // Kadang2 endpoint akan balas text/plain; kita cuba parse JSON
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { ok: false, raw: text }; }
 
       if (!res.ok) {
-        setStatus("Login gagal: " + (res.error || "Unknown error"), true);
+        throw new Error(`HTTP ${res.status} — ${text.slice(0, 120)}`);
+      }
+      return data;
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  // ===== Google Sign-In Callback =====
+  async function onGoogleCredentialResponse(response) {
+    try {
+      setStatus("Semak akaun & whitelist...", "info");
+
+      const credential = response && response.credential;
+      if (!credential) throw new Error("Token Google kosong (credential missing).");
+
+      // whoami: backend verify token, semak domain + whitelist
+      const data = await apiGet("whoami", { credential });
+
+      // expected: { ok:true, email:"...", allowed:true/false }
+      if (!data || data.ok !== true) {
+        throw new Error(data && data.error ? data.error : "Server balas tidak valid");
+      }
+
+      if (!data.email) throw new Error("Email kosong dari server.");
+      if (data.allowed !== true) {
+        setStatus("Akses ditolak: email tiada dalam whitelist.", "err");
         return;
       }
 
-      // success
-      localStorage.setItem("ri_email", res.email || "");
-      setStatus("Berjaya login: " + (res.email || ""), false);
+      // store session ringan (kalau kau ada team.html)
+      localStorage.setItem("ri_email", data.email);
+      localStorage.setItem("ri_login_ts", String(Date.now()));
 
-      // Optional: redirect
-      // window.location.href = "./team.html";
+      setStatus("Login berjaya. Redirect...", "ok");
+      // ubah ikut flow kau
+      window.location.href = "team.html";
     } catch (err) {
-      setStatus("Login gagal: " + (err.message || String(err)), true);
+      const msg = (err && err.name === "AbortError")
+        ? "Login gagal: Proxy timeout (request lambat / blocked)."
+        : ("Login gagal: " + (err?.message || String(err)));
+      setStatus(msg, "err");
+      console.error(err);
     }
   }
 
-  // boot
-  function boot() {
-    // basic config sanity
-    if (!CFG || !CFG.PROXY_URL || !CFG.GOOGLE_CLIENT_ID) {
-      setStatus("Config tak lengkap. Semak PROXY_URL & GOOGLE_CLIENT_ID.", true);
-      return;
+  // ===== Boot =====
+  async function boot() {
+    try {
+      setStatus("Memulakan sistem...", "info");
+
+      // test ping
+      const ping = await apiGet("ping", {});
+      // ping boleh jadi {ok:true,...} atau text raw, ikut backend
+      setStatus("Sedia. Sila login.", "ok");
+      console.log("ping:", ping);
+
+      // init Google button
+      if (!CFG.GOOGLE_CLIENT_ID || !CFG.GOOGLE_CLIENT_ID.includes(".apps.googleusercontent.com")) {
+        setStatus("GOOGLE_CLIENT_ID tak betul. Semak config.js.", "err");
+        return;
+      }
+
+      if (!window.google || !google.accounts || !google.accounts.id) {
+        setStatus("Google Identity Services tak load (check script client).", "err");
+        return;
+      }
+
+      google.accounts.id.initialize({
+        client_id: CFG.GOOGLE_CLIENT_ID,
+        callback: onGoogleCredentialResponse,
+        auto_select: false,
+        cancel_on_tap_outside: true
+      });
+
+      // Render button pada div id="googleBtn"
+      const btnEl = $("googleBtn");
+      if (!btnEl) {
+        setStatus("UI missing: div#googleBtn tak wujud.", "err");
+        return;
+      }
+
+      google.accounts.id.renderButton(btnEl, {
+        theme: "outline",
+        size: "large",
+        type: "standard",
+        text: "continue_with",
+        shape: "rectangular"
+      });
+
+    } catch (err) {
+      const msg = (err && err.name === "AbortError")
+        ? "Server ping timeout."
+        : ("Boot error: " + (err?.message || String(err)));
+      setStatus(msg, "err");
+      console.error(err);
     }
-
-    createProxyIframe();
-
-    // init GIS button
-    /* global google */
-    google.accounts.id.initialize({
-      client_id: CFG.GOOGLE_CLIENT_ID,
-      callback: onGoogleCredentialResponse,
-      auto_select: false,
-      cancel_on_tap_outside: true
-    });
-
-    google.accounts.id.renderButton($("#googleBtn"), {
-      theme: "outline",
-      size: "large",
-      width: 320,
-      text: "continue_with"
-    });
-
-    setStatus("", false);
   }
 
-  window.addEventListener("load", boot);
+  window.addEventListener("DOMContentLoaded", boot);
 })();
