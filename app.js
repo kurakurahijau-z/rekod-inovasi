@@ -1,124 +1,130 @@
-/* app.js — Rekod Inovasi Jabatan (Login Google + whitelist)
-   - Semua fetch guna APP_CONFIG.API_BASE (echo) untuk elak CORS.
-   - POST guna Content-Type text/plain supaya tak trigger preflight OPTIONS (selamat untuk Apps Script).
-*/
-
+// app.js
 (function () {
+  const CFG = window.APP_CONFIG;
+
   const $ = (sel) => document.querySelector(sel);
 
-  // Tukar ikut ID element HTML kau kalau berbeza
-  const elMsg = $("#msg") || document.querySelector('[data-msg]');
-  const setMsg = (t, isErr = false) => {
-    if (!elMsg) return;
-    elMsg.textContent = t || "";
-    elMsg.style.color = isErr ? "#b91c1c" : "#334155";
-  };
+  let proxyFrame = null;
+  let proxyReady = false;
+  const pending = new Map();
 
-  function getCfg() {
-    if (!window.APP_CONFIG || !APP_CONFIG.API_BASE) {
-      throw new Error("APP_CONFIG tak wujud / API_BASE kosong. Pastikan config.js load dulu.");
-    }
-    return window.APP_CONFIG;
+  function setStatus(msg, isError) {
+    const el = $("#status");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.style.color = isError ? "#dc2626" : "#334155";
   }
 
-  // Helper: POST tanpa preflight
-  async function apiPost(payloadObj) {
-    const { API_BASE } = getCfg();
+  function createProxyIframe() {
+    proxyFrame = document.createElement("iframe");
+    proxyFrame.src = CFG.PROXY_URL; // loads Proxy.html from Apps Script
+    proxyFrame.style.display = "none";
+    proxyFrame.referrerPolicy = "no-referrer";
+    document.body.appendChild(proxyFrame);
+  }
 
-    const res = await fetch(API_BASE, {
-      method: "POST",
-      headers: {
-        // text/plain = simple request -> tak trigger preflight
-        "Content-Type": "text/plain;charset=utf-8"
-      },
-      body: JSON.stringify(payloadObj)
+  window.addEventListener("message", (event) => {
+    // only accept from Apps Script domains
+    // Apps Script iframe origin usually: https://script.google.com OR https://script.googleusercontent.com
+    const okOrigin =
+      event.origin.startsWith("https://script.google.com") ||
+      event.origin.startsWith("https://script.googleusercontent.com");
+
+    if (!okOrigin) return;
+
+    const data = event.data || {};
+    if (data.proxyReady) {
+      proxyReady = true;
+      return;
+    }
+
+    if (!data.rid) return;
+    const resolver = pending.get(data.rid);
+    if (resolver) {
+      pending.delete(data.rid);
+      resolver(data);
+    }
+  });
+
+  function callProxy(action, payload) {
+    return new Promise((resolve, reject) => {
+      if (!proxyFrame || !proxyFrame.contentWindow) {
+        reject(new Error("Proxy iframe not ready"));
+        return;
+      }
+      const rid = "r" + Math.random().toString(16).slice(2) + Date.now();
+      pending.set(rid, (res) => resolve(res));
+
+      // We post to "*" because we don't control exact origin (script.google.com vs script.googleusercontent.com),
+      // security is enforced inside Proxy.html by checking GitHub origin.
+      proxyFrame.contentWindow.postMessage({ rid, action, payload }, "*");
+
+      setTimeout(() => {
+        if (pending.has(rid)) {
+          pending.delete(rid);
+          reject(new Error("Proxy timeout"));
+        }
+      }, 15000);
     });
-
-    const txt = await res.text();
-
-    // Cuba parse JSON
-    let data;
-    try { data = JSON.parse(txt); } catch (e) { data = { ok: false, raw: txt }; }
-
-    if (!res.ok) {
-      const msg = data?.error || data?.message || `HTTP ${res.status}`;
-      throw new Error(msg);
-    }
-    return data;
-  }
-
-  // Optional ping untuk debug (tak wajib)
-  async function apiPing() {
-    return apiPost({ action: "ping" });
   }
 
   // Google Identity Services callback
-  window.onGoogleCredentialResponse = async function (response) {
+  async function onGoogleCredentialResponse(response) {
     try {
-      setMsg("Semak akaun & whitelist…");
+      setStatus("Semak akses…", false);
 
-      const credential = response && response.credential;
-      if (!credential) {
-        setMsg("Login gagal: token kosong dari Google", true);
+      const idToken = response && response.credential;
+      if (!idToken) {
+        setStatus("Login gagal: token kosong dari Google", true);
         return;
       }
 
-      // Hantar token ke server untuk verify + whitelist check
-      const data = await apiPost({
-        action: "loginGoogle",
-        credential
-      });
+      const res = await callProxy("login", { idToken });
 
-      console.log("loginGoogle response:", data);
-
-      // Normalisasi email (sebab kadang payload berbeza)
-      const email =
-        data?.email ||
-        data?.user?.email ||
-        data?.profile?.email ||
-        "";
-
-      if (!email) {
-        setMsg("Login gagal: email kosong dari server", true);
+      if (!res.ok) {
+        setStatus("Login gagal: " + (res.error || "Unknown error"), true);
         return;
       }
 
-      if (data.allowed !== true) {
-        // Backend patut bagi reason kalau tak allowed
-        const reason = data.reason || "email tiada dalam whitelist";
-        setMsg(`Akses ditolak: ${reason}`, true);
-        return;
-      }
+      // success
+      localStorage.setItem("ri_email", res.email || "");
+      setStatus("Berjaya login: " + (res.email || ""), false);
 
-      // Success
-      setMsg(`Berjaya. (${email})`);
-
-      // Simpan session ringkas (kalau kau nak guna untuk page seterusnya)
-      localStorage.setItem("ri_email", email);
-      localStorage.setItem("ri_login_ts", new Date().toISOString());
-
-      // Redirect (kalau ada)
-      // location.href = "dashboard.html";
+      // Optional: redirect
+      // window.location.href = "./team.html";
     } catch (err) {
-      console.error(err);
-      setMsg(`Failed to fetch / API error: ${err.message}`, true);
+      setStatus("Login gagal: " + (err.message || String(err)), true);
     }
-  };
+  }
 
-  // Boot: pastikan script load elok
-  (async function boot() {
-    try {
-      getCfg();
-
-      // Ping sekali untuk pastikan endpoint hidup (optional)
-      // Kalau kau rasa menyusahkan, kau boleh comment line ini.
-      await apiPing();
-
-      // Kalau kau guna elemen custom untuk button google, biar index.html handle.
-      // Di sini kita cuma pastikan callback wujud.
-    } catch (e) {
-      console.error(e);
-      setMsg(e.message, true);
+  // boot
+  function boot() {
+    // basic config sanity
+    if (!CFG || !CFG.PROXY_URL || !CFG.GOOGLE_CLIENT_ID) {
+      setStatus("Config tak lengkap. Semak PROXY_URL & GOOGLE_CLIENT_ID.", true);
+      return;
     }
-  })();
+
+    createProxyIframe();
+
+    // init GIS button
+    /* global google */
+    google.accounts.id.initialize({
+      client_id: CFG.GOOGLE_CLIENT_ID,
+      callback: onGoogleCredentialResponse,
+      auto_select: false,
+      cancel_on_tap_outside: true
+    });
+
+    google.accounts.id.renderButton($("#googleBtn"), {
+      theme: "outline",
+      size: "large",
+      width: 320,
+      text: "continue_with"
+    });
+
+    setStatus("", false);
+  }
+
+  window.addEventListener("load", boot);
 })();
