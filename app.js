@@ -1,131 +1,124 @@
-// app.js
+/* app.js — Rekod Inovasi Jabatan (Login Google + whitelist)
+   - Semua fetch guna APP_CONFIG.API_BASE (echo) untuk elak CORS.
+   - POST guna Content-Type text/plain supaya tak trigger preflight OPTIONS (selamat untuk Apps Script).
+*/
+
 (function () {
-  const CFG = window.APP_CONFIG || {};
-  const API_BASE = CFG.API_BASE;
-  const ALLOWED_DOMAIN = CFG.ALLOWED_DOMAIN || "pms.edu.my";
+  const $ = (sel) => document.querySelector(sel);
 
-  const $status = document.getElementById("statusText"); // pastikan id ni wujud
-  const $btn = document.getElementById("googleBtn");     // container button
-  const $emailHint = document.getElementById("emailHint");
+  // Tukar ikut ID element HTML kau kalau berbeza
+  const elMsg = $("#msg") || document.querySelector('[data-msg]');
+  const setMsg = (t, isErr = false) => {
+    if (!elMsg) return;
+    elMsg.textContent = t || "";
+    elMsg.style.color = isErr ? "#b91c1c" : "#334155";
+  };
 
-  function setStatus(msg, isError) {
-    if (!$status) return;
-    $status.textContent = msg;
-    $status.style.color = isError ? "#dc2626" : "#2563eb";
+  function getCfg() {
+    if (!window.APP_CONFIG || !APP_CONFIG.API_BASE) {
+      throw new Error("APP_CONFIG tak wujud / API_BASE kosong. Pastikan config.js load dulu.");
+    }
+    return window.APP_CONFIG;
   }
 
-  // --- JSONP helper (no CORS) ---
-  function jsonp(url, params) {
-    return new Promise((resolve, reject) => {
-      const cbName = "cb_" + Math.random().toString(36).slice(2);
-      const qs = new URLSearchParams({ ...params, callback: cbName });
+  // Helper: POST tanpa preflight
+  async function apiPost(payloadObj) {
+    const { API_BASE } = getCfg();
 
-      const src = url + (url.includes("?") ? "&" : "?") + qs.toString();
-      const script = document.createElement("script");
-      script.src = src;
-      script.async = true;
-
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error("jsonp_timeout"));
-      }, 15000);
-
-      function cleanup() {
-        clearTimeout(timeout);
-        delete window[cbName];
-        script.remove();
-      }
-
-      window[cbName] = (data) => {
-        cleanup();
-        resolve(data);
-      };
-
-      script.onerror = () => {
-        cleanup();
-        reject(new Error("jsonp_network_error"));
-      };
-
-      document.head.appendChild(script);
+    const res = await fetch(API_BASE, {
+      method: "POST",
+      headers: {
+        // text/plain = simple request -> tak trigger preflight
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify(payloadObj)
     });
+
+    const txt = await res.text();
+
+    // Cuba parse JSON
+    let data;
+    try { data = JSON.parse(txt); } catch (e) { data = { ok: false, raw: txt }; }
+
+    if (!res.ok) {
+      const msg = data?.error || data?.message || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    return data;
   }
 
-  // --- JWT decode (Google credential is a JWT) ---
-  function decodeJwtEmail(credential) {
-    const parts = String(credential || "").split(".");
-    if (parts.length < 2) return "";
-    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const json = decodeURIComponent(atob(payload).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
-    const obj = JSON.parse(json);
-    return String(obj.email || "").trim().toLowerCase();
+  // Optional ping untuk debug (tak wajib)
+  async function apiPing() {
+    return apiPost({ action: "ping" });
   }
 
-  async function handleGoogleCredential(response) {
+  // Google Identity Services callback
+  window.onGoogleCredentialResponse = async function (response) {
     try {
-      setStatus("Semak akaun Google...", false);
+      setMsg("Semak akaun & whitelist…");
 
-      const email = decodeJwtEmail(response.credential);
+      const credential = response && response.credential;
+      if (!credential) {
+        setMsg("Login gagal: token kosong dari Google", true);
+        return;
+      }
+
+      // Hantar token ke server untuk verify + whitelist check
+      const data = await apiPost({
+        action: "loginGoogle",
+        credential
+      });
+
+      console.log("loginGoogle response:", data);
+
+      // Normalisasi email (sebab kadang payload berbeza)
+      const email =
+        data?.email ||
+        data?.user?.email ||
+        data?.profile?.email ||
+        "";
+
       if (!email) {
-        setStatus("Login gagal: email kosong dari Google token", true);
+        setMsg("Login gagal: email kosong dari server", true);
         return;
       }
 
-      if (!email.endsWith("@" + ALLOWED_DOMAIN)) {
-        setStatus("Email bukan domain @" + ALLOWED_DOMAIN, true);
+      if (data.allowed !== true) {
+        // Backend patut bagi reason kalau tak allowed
+        const reason = data.reason || "email tiada dalam whitelist";
+        setMsg(`Akses ditolak: ${reason}`, true);
         return;
       }
 
-      if ($emailHint) $emailHint.textContent = email;
+      // Success
+      setMsg(`Berjaya. (${email})`);
 
-      setStatus("Semak whitelist StaffDirectory...", false);
-
-      const data = await jsonp(API_BASE, { action: "checkWhitelist", email });
-
-      if (!data || data.ok !== true) {
-        setStatus("Server error: " + (data && data.error ? data.error : "unknown"), true);
-        return;
-      }
-
-      if (!data.allowed) {
-        setStatus("Akses ditolak: email tiada dalam whitelist (StaffDirectory)", true);
-        return;
-      }
-
-      // allowed -> you can redirect / show dashboard
-      setStatus("Berjaya! Akses dibenarkan.", false);
-
-      // contoh simpan session ringkas
+      // Simpan session ringkas (kalau kau nak guna untuk page seterusnya)
       localStorage.setItem("ri_email", email);
-      localStorage.setItem("ri_loggedIn", "1");
+      localStorage.setItem("ri_login_ts", new Date().toISOString());
 
-      // TODO: redirect page
-      // window.location.href = "./home.html";
-
+      // Redirect (kalau ada)
+      // location.href = "dashboard.html";
     } catch (err) {
       console.error(err);
-      setStatus("Login gagal: " + String(err.message || err), true);
+      setMsg(`Failed to fetch / API error: ${err.message}`, true);
     }
-  }
-
-  // init Google button (GIS)
-  window.initGoogle = function initGoogle() {
-    if (!window.google || !google.accounts || !google.accounts.id) {
-      setStatus("Google Identity Services belum load", true);
-      return;
-    }
-
-    setStatus("", false);
-
-    google.accounts.id.initialize({
-      client_id: CFG.GOOGLE_CLIENT_ID,
-      callback: handleGoogleCredential,
-      hosted_domain: ALLOWED_DOMAIN // ini bagi hint domain
-    });
-
-    google.accounts.id.renderButton($btn, {
-      theme: "outline",
-      size: "large",
-      text: "signin_with"
-    });
   };
+
+  // Boot: pastikan script load elok
+  (async function boot() {
+    try {
+      getCfg();
+
+      // Ping sekali untuk pastikan endpoint hidup (optional)
+      // Kalau kau rasa menyusahkan, kau boleh comment line ini.
+      await apiPing();
+
+      // Kalau kau guna elemen custom untuk button google, biar index.html handle.
+      // Di sini kita cuma pastikan callback wujud.
+    } catch (e) {
+      console.error(e);
+      setMsg(e.message, true);
+    }
+  })();
 })();
