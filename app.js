@@ -1,148 +1,99 @@
-/* app.js - Rekod Inovasi Jabatan (Frontend)
- * - GitHub Pages
- * - Google Identity Services (One Tap / Button)
- * - API: Google Apps Script Web App
- */
-
 const CFG = window.APP_CONFIG || {};
+const $ = (id) => document.getElementById(id);
+
 const state = {
   token: "",
   email: "",
   role: "user",
-  innovations: [],
   selectedInnovationId: "",
-  staffSuggest: [],
-  lastStaffQuery: "",
-  comps: [],
-  team: [],
+  selectedInnovationTitle: ""
 };
 
-function $(id){ return document.getElementById(id); }
-function show(el){ el.classList.remove("hidden"); }
-function hide(el){ el.classList.add("hidden"); }
-
-function setBanner(msg){
-  const el = $("globalMsg");
-  if (!msg) { hide(el); el.textContent = ""; return; }
-  el.textContent = msg;
-  show(el);
+function saveLocal(){
+  localStorage.setItem("ri_state", JSON.stringify({
+    token: state.token,
+    email: state.email,
+    role: state.role,
+    selectedInnovationId: state.selectedInnovationId,
+    selectedInnovationTitle: state.selectedInnovationTitle
+  }));
 }
-
-function safeText(x){ return String(x ?? ""); }
 
 function loadLocal(){
-  state.token = localStorage.getItem("ri_token") || "";
-  state.selectedInnovationId = localStorage.getItem("ri_selectedInnovationId") || "";
+  try{
+    const raw = localStorage.getItem("ri_state");
+    if(!raw) return;
+    const s = JSON.parse(raw);
+    state.token = s.token || "";
+    state.email = s.email || "";
+    state.role = s.role || "user";
+    state.selectedInnovationId = s.selectedInnovationId || "";
+    state.selectedInnovationTitle = s.selectedInnovationTitle || "";
+  }catch(e){}
 }
 
-function saveLocal(){
-  localStorage.setItem("ri_token", state.token || "");
-  localStorage.setItem("ri_selectedInnovationId", state.selectedInnovationId || "");
-}
-
-function logout(){
+function clearLocal(){
+  localStorage.removeItem("ri_state");
   state.token = "";
   state.email = "";
   state.role = "user";
-  state.innovations = [];
   state.selectedInnovationId = "";
+  state.selectedInnovationTitle = "";
+}
+
+function showMsg(msg){
+  const box = $("globalMsg");
+  if(!msg){
+    box.classList.add("hidden");
+    box.textContent = "";
+    return;
+  }
+  box.classList.remove("hidden");
+  box.textContent = msg;
+}
+
+function setSelectedInnovation(id, title){
+  state.selectedInnovationId = id || "";
+  state.selectedInnovationTitle = title || "";
+  $("selectedInnovationTitle").textContent = state.selectedInnovationTitle || "-";
   saveLocal();
-
-  $("userEmail").textContent = "";
-  $("userRole").textContent = "";
-  hide($("btnLogout"));
-
-  show($("loginView"));
-  hide($("appView"));
-  setBanner("");
 }
 
-function qs(params){
-  const u = new URLSearchParams();
-  Object.entries(params || {}).forEach(([k,v])=>{
-    if (v === undefined || v === null) return;
-    u.set(k, String(v));
-  });
-  return u.toString();
+function requireInnovation(){
+  if(!state.selectedInnovationId){
+    showMsg("Pilih inovasi dulu kat tab Inovasi.");
+    return false;
+  }
+  showMsg("");
+  return true;
 }
 
-// IMPORTANT: guna request "simple" (GET atau POST form-urlencoded) supaya lebih stable.
-async function api(action, params={}, method="GET"){
+/**
+ * API helper:
+ * Untuk elak drama CORS/preflight, aku buat semua call guna GET.
+ * Body akan dihantar sebagai query param 'payload' (JSON stringify).
+ */
+async function api(action, body = null){
   const base = CFG.API_BASE;
-  if (!base) throw new Error("API_BASE tak set dalam config.js");
+  if(!base) throw new Error("API_BASE belum set dalam config.js");
 
-  const p = { action, ...params };
-  if (state.token && !("token" in p)) p.token = state.token;
+  const url = new URL(base);
+  url.searchParams.set("action", action);
 
-  if (method === "GET"){
-    const url = base + "?" + qs(p);
-    const res = await fetch(url, { method:"GET" });
-    const txt = await res.text();
-    let data;
-    try { data = JSON.parse(txt); } catch(e){ throw new Error("Response bukan JSON: " + txt.slice(0,120)); }
-    return data;
+  if(state.token) url.searchParams.set("token", state.token);
+
+  if(body && typeof body === "object"){
+    url.searchParams.set("payload", JSON.stringify(body));
   }
 
-  // POST as application/x-www-form-urlencoded (no custom headers)
-  const body = new URLSearchParams();
-  Object.entries(p).forEach(([k,v])=> body.set(k, String(v)));
-
-  const res = await fetch(base, { method:"POST", body });
+  const res = await fetch(url.toString(), { method: "GET" });
   const txt = await res.text();
-  let data;
-  try { data = JSON.parse(txt); } catch(e){ throw new Error("Response bukan JSON: " + txt.slice(0,120)); }
+  let data = {};
+  try { data = JSON.parse(txt); } catch(e) { data = { ok:false, error:"Invalid JSON: "+txt.slice(0,120) }; }
   return data;
 }
 
-function parseSelectedStaff(val){
-  const s = String(val || "").trim();
-  // format: "NAME <email>" atau "<email>" atau "email"
-  const m = s.match(/<([^>]+)>/);
-  if (m && m[1]) {
-    const email = m[1].trim();
-    const name = s.replace(m[0], "").trim();
-    return { email, name };
-  }
-  // if looks like email
-  if (s.includes("@")) return { email: s.replace(/[<>]/g,"").trim(), name: "" };
-  return { email:"", name:s };
-}
-
-function renderTabs(active){
-  document.querySelectorAll(".tab").forEach(btn=>{
-    const on = btn.getAttribute("data-tab") === active;
-    btn.classList.toggle("active", on);
-  });
-  ["innovations","team","competitions","profile"].forEach(t=>{
-    const sec = $("tab_"+t);
-    if (!sec) return;
-    if (t === active) show(sec); else hide(sec);
-  });
-}
-
-function selectedInnovation(){
-  const id = state.selectedInnovationId;
-  if (!id) return null;
-  return state.innovations.find(x => String(x.innovationId || x.id || "").trim() === id) || null;
-}
-
-function renderSelectedInnovationBar(){
-  const inv = selectedInnovation();
-  $("selectedInnovationTitle").textContent = inv ? (inv.tajuk || "-") : "-";
-}
-
-function requireSelectedInnovation(){
-  const inv = selectedInnovation();
-  if (!inv){
-    setBanner("Pilih inovasi dulu kat tab Inovasi.");
-    return null;
-  }
-  setBanner("");
-  return inv;
-}
-
-/* -------------------- LOGIN -------------------- */
-
+/** Google Login button init (tunggu GIS ready) */
 function initGoogleButton(){
   const clientId = CFG.GOOGLE_CLIENT_ID;
   if (!clientId) {
@@ -150,481 +101,406 @@ function initGoogleButton(){
     return;
   }
 
-  // GIS button
-  window.google.accounts.id.initialize({
-    client_id: clientId,
-    callback: async (resp) => {
-      try{
-        $("loginMsg").textContent = "Sedang login...";
-        const credential = resp && resp.credential ? resp.credential : "";
-        if (!credential) throw new Error("No credential from Google");
-
-        // loginGoogle guna GET (simple)
-        const out = await api("loginGoogle", { credential }, "GET");
-        if (!out.ok) throw new Error(out.error || "Login gagal");
-
-        state.token = out.token;
-        state.email = out.email;
-        state.role = out.role || "user";
-        saveLocal();
-
-        await bootAfterLogin();
-      }catch(err){
-        $("loginMsg").textContent = "Login gagal: " + (err.message || err);
-      }
-    }
-  });
-
-  window.google.accounts.id.renderButton(
-    $("googleBtn"),
-    { theme:"outline", size:"large", shape:"pill", width: 340 }
-  );
-}
-
-async function checkSession(){
-  if (!state.token) return false;
-  try{
-    const out = await api("me", {}, "GET");
-    if (!out.ok) return false;
-    state.email = out.email || "";
-    state.role = out.role || "user";
-    return true;
-  }catch(e){
-    return false;
-  }
-}
-
-async function bootAfterLogin(){
-  $("userEmail").textContent = state.email || "";
-  $("userRole").textContent = "role: " + (state.role || "user");
-  $("pf_email").textContent = state.email || "";
-  $("pf_role").textContent = state.role || "user";
-
-  show($("btnLogout"));
-  hide($("loginView"));
-  show($("appView"));
-
-  // load innovations and restore selection
-  await loadInnovations();
-  renderSelectedInnovationBar();
-
-  // default tab
-  renderTabs("innovations");
-}
-
-/* -------------------- INNOVATIONS -------------------- */
-
-function innovCard(inv){
-  const id = String(inv.innovationId || inv.id || "").trim();
-  const isSelected = id && id === state.selectedInnovationId;
-
-  const tajuk = safeText(inv.tajuk);
-  const tahun = safeText(inv.tahun);
-  const kategori = safeText(inv.kategori);
-  const status = safeText(inv.status);
-  const myipoStatus = safeText(inv.myipoStatus);
-  const myipoNumber = safeText(inv.myipoNumber);
-
-  return `
-    <div class="card p-4 ${isSelected ? "border-gray-900" : ""}">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <div class="font-semibold">${tajuk || "-"}</div>
-          <div class="muted text-sm">Tahun: ${tahun || "-"} • Kategori: ${kategori || "-"}</div>
-          <div class="muted text-sm">Status: ${status || "-"}</div>
-          ${myipoStatus ? `<div class="muted text-sm">MYIPO: ${myipoStatus}${myipoNumber ? " • " + myipoNumber : ""}</div>` : ``}
-        </div>
-        <div class="flex flex-col gap-2">
-          <button class="btn ${isSelected ? "btn-primary" : ""}" data-pick="${id}">
-            ${isSelected ? "Dipilih" : "Pilih"}
-          </button>
-          <button class="btn" data-delinv="${id}">Buang</button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-async function loadInnovations(){
-  const out = await api("listMyInnovations", {}, "GET");
-  if (!out.ok) throw new Error(out.error || "Gagal load innovations");
-  state.innovations = out.items || [];
-
-  // kalau selected id tak wujud lagi, clear
-  if (state.selectedInnovationId) {
-    const still = state.innovations.some(x => String(x.innovationId||x.id||"").trim() === state.selectedInnovationId);
-    if (!still) state.selectedInnovationId = "";
-  }
-  saveLocal();
-
-  const el = $("innovList");
-  if (!state.innovations.length){
-    el.innerHTML = `<div class="muted">Belum ada inovasi. Tambah dulu kat kanan.</div>`;
-  } else {
-    el.innerHTML = state.innovations.map(innovCard).join("");
-  }
-
-  // bind buttons
-  el.querySelectorAll("[data-pick]").forEach(btn=>{
-    btn.addEventListener("click", async ()=>{
-      state.selectedInnovationId = btn.getAttribute("data-pick") || "";
-      saveLocal();
-      renderSelectedInnovationBar();
-      setBanner("");
-
-      // refresh tab data bila select
-      await loadTeam();
-      await loadCompetitions();
-    });
-  });
-
-  el.querySelectorAll("[data-delinv]").forEach(btn=>{
-    btn.addEventListener("click", async ()=>{
-      const id = btn.getAttribute("data-delinv");
-      if (!id) return;
-      if (!confirm("Buang inovasi ini? Team & pertandingan berkaitan akan kekal (kalau ada).")) return;
-      const out2 = await api("deleteInnovation", { id }, "POST");
-      if (!out2.ok) return alert(out2.error || "Gagal buang");
-      await loadInnovations();
-      renderSelectedInnovationBar();
-    });
-  });
-}
-
-/* -------------------- STAFF SEARCH (for Team) -------------------- */
-
-let staffTimer = null;
-
-function renderStaffDatalist(items){
-  const dl = $("staffDatalist");
-  dl.innerHTML = (items || []).map(x=>{
-    const email = safeText(x.email).toLowerCase();
-    const name = safeText(x.name || x.nama || "");
-    const label = `${name} <${email}>`.trim();
-    return `<option value="${label}"></option>`;
-  }).join("");
-}
-
-async function searchStaff(q){
-  const query = String(q || "").trim();
-  if (query.length < 2) { state.staffSuggest = []; renderStaffDatalist([]); return; }
-
-  // throttle
-  if (query === state.lastStaffQuery) return;
-  state.lastStaffQuery = query;
-
-  const out = await api("searchStaff", { q: query }, "GET");
-  if (!out.ok) return;
-
-  state.staffSuggest = out.items || [];
-  renderStaffDatalist(state.staffSuggest);
-}
-
-function applyStaffSelection_(){
-  const val = $("tm_search").value.trim();
-  const parsed = parseSelectedStaff(val);
-  let email = (parsed.email || "").toLowerCase().trim();
-  let name = (parsed.name || "").trim();
-
-  if (state.staffSuggest && state.staffSuggest.length) {
-    if (email) {
-      const hit = state.staffSuggest.find(x => String(x.email || "").toLowerCase().trim() === email);
-      if (hit) {
-        $("tm_email").value = (hit.email || email);
-        $("tm_name").value = (hit.name || hit.nama || name);
-        return;
-      }
-    }
-    const hit2 = state.staffSuggest.find(x => {
-      const label = `${x.name || x.nama || ""} <${x.email || ""}>`.trim();
-      return label.toLowerCase() === val.toLowerCase();
-    });
-    if (hit2) {
-      $("tm_email").value = hit2.email || "";
-      $("tm_name").value = hit2.name || hit2.nama || "";
+  const mount = () => {
+    if (!window.google || !google.accounts || !google.accounts.id) {
+      $("loginMsg").textContent = "Loading login Google...";
+      setTimeout(mount, 250);
       return;
     }
-  }
 
-  if (email) $("tm_email").value = email;
-  if (name && !$("tm_name").value.trim()) $("tm_name").value = name;
+    $("loginMsg").textContent = "";
+    $("googleBtn").innerHTML = "";
+
+    google.accounts.id.initialize({
+      client_id: clientId,
+      callback: async (resp) => {
+        try{
+          $("loginMsg").textContent = "Sedang login...";
+          const credential = resp && resp.credential ? resp.credential : "";
+          if (!credential) throw new Error("No credential from Google");
+
+          const out = await api("loginGoogle", { credential });
+          if (!out.ok) throw new Error(out.error || "Login gagal");
+
+          state.token = out.token;
+          state.email = out.email;
+          state.role = out.role || "user";
+          saveLocal();
+
+          await bootAfterLogin();
+        }catch(err){
+          $("loginMsg").textContent = "Login gagal: " + (err.message || err);
+        }
+      }
+    });
+
+    google.accounts.id.renderButton(
+      $("googleBtn"),
+      { theme:"outline", size:"large", shape:"pill", width: 340 }
+    );
+  };
+
+  mount();
 }
 
-/* -------------------- TEAM -------------------- */
+/** UI tab switching */
+function activateTab(tabId){
+  document.querySelectorAll(".tabPane").forEach(el => el.classList.add("hidden"));
+  $(tabId).classList.remove("hidden");
 
-function teamCard(m){
-  const name = safeText(m.nama || m.memberName || m.name || "");
-  const email = safeText(m.email || m.memberEmail || "");
-  const role = safeText(m.peranan || m.roleInTeam || m.role || "member");
-  const id = safeText(m.teamId || m.id || "");
+  document.querySelectorAll(".tabBtn").forEach(btn=>{
+    const active = btn.dataset.tab === tabId;
+    btn.classList.toggle("bg-slate-900", active);
+    btn.classList.toggle("text-white", active);
+    btn.classList.toggle("border-slate-900", active);
+  });
 
-  return `
-    <div class="card p-4">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <div class="font-semibold">${name || "-"}</div>
-          <div class="muted text-sm">${email || "-"}</div>
-          <div class="muted text-sm">Peranan: ${role || "-"}</div>
-        </div>
-        <button class="btn" data-delteam="${id}">Buang</button>
-      </div>
-    </div>
-  `;
+  if(tabId === "tabTeam") renderTeam();
+  if(tabId === "tabPertandingan") renderCompetitions();
+  if(tabId === "tabInovasi") renderInnovations();
+  if(tabId === "tabProfil") renderProfil();
 }
 
-async function loadTeam(){
-  const inv = requireSelectedInnovation();
-  if (!inv){
-    $("teamList").innerHTML = `<div class="muted">Pilih inovasi dulu.</div>`;
+function renderProfil(){
+  $("profilEmail").textContent = state.email || "-";
+  $("profilRole").textContent = state.role || "-";
+}
+
+async function renderInnovations(){
+  const out = await api("listMyInnovations");
+  if(!out.ok) { showMsg(out.error || "Gagal load inovasi"); return; }
+
+  const list = $("inovasiList");
+  list.innerHTML = "";
+
+  const items = out.items || [];
+  if(items.length === 0){
+    list.innerHTML = `<div class="text-sm text-slate-500">Belum ada inovasi. Tambah kat sebelah kanan.</div>`;
     return;
   }
 
-  const innovationId = String(inv.innovationId || inv.id || "").trim();
-  const out = await api("listTeam", { innovationId }, "GET");
-  if (!out.ok) throw new Error(out.error || "Gagal load team");
-  state.team = out.items || [];
-
-  const el = $("teamList");
-  if (!state.team.length){
-    el.innerHTML = `<div class="muted">Belum ada ahli team untuk inovasi ini.</div>`;
-  } else {
-    el.innerHTML = state.team.map(teamCard).join("");
-  }
-
-  el.querySelectorAll("[data-delteam]").forEach(btn=>{
-    btn.addEventListener("click", async ()=>{
-      const teamId = btn.getAttribute("data-delteam");
-      if (!teamId) return;
-      if (!confirm("Buang ahli ini?")) return;
-      const out2 = await api("deleteTeam", { id: teamId, innovationId }, "POST");
-      if (!out2.ok) return alert(out2.error || "Gagal buang");
-      await loadTeam();
-    });
+  items.forEach(it=>{
+    const active = it.id === state.selectedInnovationId;
+    const card = document.createElement("button");
+    card.className = `w-full text-left rounded-2xl border px-4 py-3 hover:bg-slate-50 ${active ? "border-emerald-300 bg-emerald-50" : "border-slate-100 bg-white"}`;
+    card.innerHTML = `
+      <div class="font-semibold">${escapeHtml(it.tajuk || "(tiada tajuk)")}</div>
+      <div class="text-xs text-slate-500 mt-1">
+        Tahun: ${escapeHtml(it.tahun||"-")} • Kategori: ${escapeHtml(it.kategori||"-")} • Status: ${escapeHtml(it.status||"-")}
+      </div>
+    `;
+    card.onclick = () => {
+      setSelectedInnovation(it.id, it.tajuk || "-");
+      showMsg("");
+      renderInnovations();
+    };
+    list.appendChild(card);
   });
 }
 
-/* -------------------- COMPETITIONS -------------------- */
+async function renderTeam(){
+  if(!requireInnovation()) return;
 
-function compCard(c){
-  const namaEvent = safeText(c.namaEvent || c.event || "");
-  const tahun = safeText(c.tahun || "");
-  const peringkat = safeText(c.peringkat || "");
-  const pingat = safeText(c.pingat || "");
-  const anugerahKhas = String(c.anugerahKhas || "").toLowerCase() === "yes";
-  const namaAnugerahKhas = safeText(c.namaAnugerahKhas || "");
+  const out = await api("listTeam", { innovationId: state.selectedInnovationId });
+  if(!out.ok) { showMsg(out.error || "Gagal load team"); return; }
 
-  const id = safeText(c.compId || c.id || "");
-  return `
-    <div class="card p-4">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <div class="font-semibold">${namaEvent || "-"}</div>
-          <div class="muted text-sm">Tahun: ${tahun || "-"} • Peringkat: ${peringkat || "-"}</div>
-          <div class="muted text-sm">Pingat: <b>${pingat || "-"}</b></div>
-          ${anugerahKhas ? `<div class="muted text-sm">Anugerah khas: ${namaAnugerahKhas || "-"}</div>` : ``}
-        </div>
-        <button class="btn" data-delcomp="${id}">Buang</button>
-      </div>
-    </div>
-  `;
-}
+  const list = $("teamList");
+  list.innerHTML = "";
 
-async function loadCompetitions(){
-  const inv = requireSelectedInnovation();
-  if (!inv){
-    $("compList").innerHTML = `<div class="muted">Pilih inovasi dulu.</div>`;
+  const items = out.items || [];
+  if(items.length === 0){
+    list.innerHTML = `<div class="text-sm text-slate-500">Belum ada ahli team.</div>`;
     return;
   }
-  const innovationId = String(inv.innovationId || inv.id || "").trim();
-  const out = await api("listCompetitions", { innovationId }, "GET");
-  if (!out.ok) throw new Error(out.error || "Gagal load competitions");
-  state.comps = out.items || [];
 
-  const el = $("compList");
-  if (!state.comps.length){
-    el.innerHTML = `<div class="muted">Belum ada rekod pertandingan.</div>`;
-  } else {
-    el.innerHTML = state.comps.map(compCard).join("");
+  items.forEach(m=>{
+    const div = document.createElement("div");
+    div.className = "rounded-2xl border border-slate-100 bg-white px-4 py-3 flex items-start justify-between gap-3";
+    div.innerHTML = `
+      <div>
+        <div class="font-semibold">${escapeHtml(m.nama || "-")}</div>
+        <div class="text-sm text-slate-600">${escapeHtml(m.email || "-")}</div>
+        <div class="text-xs text-slate-500 mt-1">Peranan: ${escapeHtml(m.peranan || "member")}</div>
+      </div>
+      <button class="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-50">Buang</button>
+    `;
+    div.querySelector("button").onclick = async () => {
+      const ok = confirm("Buang ahli ini?");
+      if(!ok) return;
+      const del = await api("deleteTeam", { id: m.id, innovationId: state.selectedInnovationId });
+      if(!del.ok) { showMsg(del.error || "Gagal buang"); return; }
+      renderTeam();
+    };
+    list.appendChild(div);
+  });
+}
+
+async function renderCompetitions(){
+  if(!requireInnovation()) return;
+
+  const out = await api("listCompetitions", { innovationId: state.selectedInnovationId });
+  if(!out.ok) { showMsg(out.error || "Gagal load pertandingan"); return; }
+
+  const list = $("compList");
+  list.innerHTML = "";
+
+  const items = out.items || [];
+  if(items.length === 0){
+    list.innerHTML = `<div class="text-sm text-slate-500">Belum ada rekod pertandingan.</div>`;
+    return;
   }
 
-  el.querySelectorAll("[data-delcomp]").forEach(btn=>{
-    btn.addEventListener("click", async ()=>{
-      const compId = btn.getAttribute("data-delcomp");
-      if (!compId) return;
-      if (!confirm("Buang rekod pertandingan ini?")) return;
-      const out2 = await api("deleteCompetition", { id: compId, innovationId }, "POST");
-      if (!out2.ok) return alert(out2.error || "Gagal buang");
-      await loadCompetitions();
-    });
+  items.forEach(c=>{
+    const badge = c.pingat ? `<span class="text-xs rounded-full px-2 py-1 border border-slate-200">${escapeHtml(c.pingat)}</span>` : "";
+    const special = (c.anugerahKhas === "yes" || c.anugerahKhas === true) ? ` • <span class="text-xs text-emerald-700">Anugerah khas: ${escapeHtml(c.namaAnugerahKhas||"-")}</span>` : "";
+
+    const div = document.createElement("div");
+    div.className = "rounded-2xl border border-slate-100 bg-white px-4 py-3 flex items-start justify-between gap-3";
+    div.innerHTML = `
+      <div>
+        <div class="font-semibold">${escapeHtml(c.namaEvent || "-")}</div>
+        <div class="text-xs text-slate-500 mt-1">
+          ${escapeHtml(c.tahun || "-")} • ${escapeHtml(c.peringkat || "-")} ${badge} ${special}
+        </div>
+      </div>
+      <button class="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-50">Buang</button>
+    `;
+    div.querySelector("button").onclick = async () => {
+      const ok = confirm("Buang rekod pertandingan ini?");
+      if(!ok) return;
+      const del = await api("deleteCompetition", { id: c.id || c.compId || "" });
+      if(!del.ok) { showMsg(del.error || "Gagal buang"); return; }
+      renderCompetitions();
+    };
+    list.appendChild(div);
   });
 }
 
-/* -------------------- EVENTS / UI WIRING -------------------- */
+/** Staff search suggestions (datalist) + autofill */
+let staffTimer = null;
+$("staffSearch")?.addEventListener("input", () => {
+  clearTimeout(staffTimer);
+  staffTimer = setTimeout(loadStaffSuggest, 250);
+});
 
-function wireUI(){
-  $("btnLogout").addEventListener("click", logout);
+async function loadStaffSuggest(){
+  const q = ($("staffSearch").value || "").trim();
+  if(q.length < 2) return;
 
-  document.querySelectorAll(".tab").forEach(btn=>{
-    btn.addEventListener("click", async ()=>{
-      const t = btn.getAttribute("data-tab");
-      renderTabs(t);
+  const out = await api("searchStaff", { q });
+  if(!out.ok) return;
 
-      if (t === "team") await loadTeam();
-      if (t === "competitions") await loadCompetitions();
-      if (t === "innovations") await loadInnovations();
-    });
-  });
+  const dl = $("staffSuggest");
+  dl.innerHTML = "";
 
-  $("btnRefreshAll").addEventListener("click", async ()=>{
-    await loadInnovations();
-    renderSelectedInnovationBar();
-    await loadTeam();
-    await loadCompetitions();
-  });
-
-  $("btnRefreshInnovations").addEventListener("click", async ()=> {
-    await loadInnovations();
-    renderSelectedInnovationBar();
-  });
-
-  $("btnAddInnovation").addEventListener("click", async ()=>{
-    try{
-      const tajuk = $("inv_tajuk").value.trim();
-      const tahun = $("inv_tahun").value.trim();
-      const kategori = $("inv_kategori").value.trim();
-      const status = $("inv_status").value.trim();
-      const myipoStatus = $("inv_myipo").value.trim();
-      const myipoNumber = $("inv_myipoNo").value.trim();
-
-      if (!tajuk) throw new Error("Tajuk diperlukan.");
-      if (!tahun) throw new Error("Tahun diperlukan.");
-
-      const out = await api("addInnovation", {
-        tajuk, tahun, kategori, status, myipoStatus, myipoNumber
-      }, "POST");
-
-      if (!out.ok) throw new Error(out.error || "Gagal tambah inovasi");
-
-      $("inv_tajuk").value = "";
-      $("inv_tahun").value = "";
-      $("inv_kategori").value = "";
-      $("inv_myipo").value = "";
-      $("inv_myipoNo").value = "";
-
-      await loadInnovations();
-      setBanner("Inovasi berjaya disimpan. Klik kad inovasi untuk pilih.");
-    }catch(err){
-      alert(err.message || err);
-    }
-  });
-
-  // Team member search
-  $("tm_search").addEventListener("input", ()=>{
-    clearTimeout(staffTimer);
-    const q = $("tm_search").value.trim();
-    staffTimer = setTimeout(()=> searchStaff(q), 180);
-  });
-
-  ["change","blur","keyup"].forEach(ev=>{
-    $("tm_search").addEventListener(ev, applyStaffSelection_);
-  });
-
-  $("btnAddTeam").addEventListener("click", async ()=>{
-    try{
-      const inv = requireSelectedInnovation();
-      if (!inv) return;
-
-      const innovationId = String(inv.innovationId || inv.id || "").trim();
-      const memberEmail = $("tm_email").value.trim().toLowerCase();
-      const memberName = $("tm_name").value.trim();
-      const roleInTeam = $("tm_role").value.trim() || "member";
-
-      if (!memberEmail) throw new Error("Email ahli diperlukan.");
-      if (!memberName) throw new Error("Nama ahli diperlukan (auto isi kalau pilih dari StaffDirectory).");
-
-      const out = await api("addTeam", {
-        innovationId,
-        email: memberEmail,
-        nama: memberName,
-        peranan: roleInTeam
-      }, "POST");
-
-      if (!out.ok) throw new Error(out.error || "Gagal tambah ahli");
-
-      $("tm_search").value = "";
-      $("tm_email").value = "";
-      $("tm_name").value = "";
-      $("tm_role").value = "";
-
-      await loadTeam();
-      setBanner("Ahli team berjaya ditambah.");
-    }catch(err){
-      alert(err.message || err);
-    }
-  });
-
-  // Competitions UI
-  $("cp_anugerah").addEventListener("change", ()=>{
-    const on = $("cp_anugerah").checked;
-    if (on) show($("cp_anugerahNama")); else hide($("cp_anugerahNama"));
-    if (!on) $("cp_anugerahNama").value = "";
-  });
-
-  $("btnRefreshTeam").addEventListener("click", loadTeam);
-  $("btnRefreshComps").addEventListener("click", loadCompetitions);
-
-  $("btnAddComp").addEventListener("click", async ()=>{
-    try{
-      const inv = requireSelectedInnovation();
-      if (!inv) return;
-
-      const innovationId = String(inv.innovationId || inv.id || "").trim();
-
-      const namaEvent = $("cp_event").value.trim();
-      const tahun = $("cp_tahun").value.trim();
-      const peringkat = $("cp_peringkat").value.trim();
-      const pingat = $("cp_pingat").value.trim();
-      const anugerahKhas = $("cp_anugerah").checked ? "yes" : "no";
-      const namaAnugerahKhas = $("cp_anugerahNama").value.trim();
-
-      if (!namaEvent) throw new Error("Nama event diperlukan.");
-      if (!tahun) throw new Error("Tahun diperlukan.");
-      if (!peringkat) throw new Error("Peringkat diperlukan.");
-      if (!pingat) throw new Error("Pingat/penyertaan diperlukan.");
-      if (anugerahKhas === "yes" && !namaAnugerahKhas) throw new Error("Nama anugerah khas diperlukan.");
-
-      const out = await api("addCompetition", {
-        innovationId,
-        namaEvent, tahun, peringkat, pingat,
-        anugerahKhas, namaAnugerahKhas
-      }, "POST");
-
-      if (!out.ok) throw new Error(out.error || "Gagal simpan pertandingan");
-
-      $("cp_event").value = "";
-      $("cp_tahun").value = "";
-      $("cp_peringkat").value = "";
-      $("cp_pingat").value = "PENYERTAAN";
-      $("cp_anugerah").checked = false;
-      hide($("cp_anugerahNama"));
-      $("cp_anugerahNama").value = "";
-
-      await loadCompetitions();
-      setBanner("Rekod pertandingan berjaya disimpan.");
-    }catch(err){
-      alert(err.message || err);
-    }
+  (out.items || []).forEach(it=>{
+    const opt = document.createElement("option");
+    // value = email, label = name
+    opt.value = it.email || "";
+    opt.label = it.name ? `${it.name}` : "";
+    dl.appendChild(opt);
   });
 }
 
-async function boot(){
+$("staffSearch")?.addEventListener("change", async () => {
+  // bila user pilih suggestion (biasanya dia jadi email)
+  const val = ($("staffSearch").value || "").trim().toLowerCase();
+  if(!val) return;
+
+  // cuba lookup
+  const out = await api("lookupStaff", { email: val });
+  if(out.ok && out.found){
+    $("memberEmail").value = out.email || val;
+    $("memberName").value = out.name || "";
+    // kosongkan search box supaya tak confuse
+    // $("staffSearch").value = "";
+  }else{
+    // allow manual
+    $("memberEmail").value = val;
+    if(!$("memberName").value) $("memberName").value = "";
+  }
+});
+
+/** Form handlers */
+$("btnAddInovasi")?.addEventListener("click", async () => {
+  try{
+    const tajuk = $("invTajuk").value.trim();
+    const tahun = $("invTahun").value.trim();
+    const kategori = $("invKategori").value.trim();
+    const status = $("invStatus").value.trim();
+    const myipoStatus = $("invMyipoStatus").value.trim();
+    const myipoNumber = $("invMyipoNumber").value.trim();
+
+    const out = await api("addInnovation", { tajuk, tahun, kategori, status, myipoStatus, myipoNumber });
+    if(!out.ok) throw new Error(out.error || "Gagal simpan inovasi");
+
+    $("invTajuk").value = "";
+    $("invTahun").value = "";
+    $("invKategori").value = "";
+    $("invStatus").value = "";
+    $("invMyipoStatus").value = "";
+    $("invMyipoNumber").value = "";
+
+    await renderInnovations();
+  }catch(e){
+    showMsg(e.message || String(e));
+  }
+});
+
+$("btnAddMember")?.addEventListener("click", async () => {
+  try{
+    if(!requireInnovation()) return;
+
+    const email = $("memberEmail").value.trim().toLowerCase();
+    const nama  = $("memberName").value.trim();
+    const peranan = $("memberRole").value.trim() || "member";
+
+    if(!email) throw new Error("Email diperlukan");
+    if(!nama) throw new Error("Nama diperlukan");
+
+    const out = await api("addTeam", {
+      innovationId: state.selectedInnovationId,
+      email,
+      nama,
+      peranan
+    });
+
+    if(!out.ok) throw new Error(out.error || "Gagal tambah ahli");
+
+    $("staffSearch").value = "";
+    $("memberEmail").value = "";
+    $("memberName").value = "";
+    $("memberRole").value = "";
+
+    renderTeam();
+  }catch(e){
+    showMsg(e.message || String(e));
+  }
+});
+
+$("compHasSpecial")?.addEventListener("change", () => {
+  const on = $("compHasSpecial").checked;
+  $("compSpecialName").classList.toggle("hidden", !on);
+  if(!on) $("compSpecialName").value = "";
+});
+
+$("btnAddComp")?.addEventListener("click", async () => {
+  try{
+    if(!requireInnovation()) return;
+
+    const namaEvent = $("compNamaEvent").value.trim();
+    const tahun = $("compTahun").value.trim();
+    const peringkat = $("compPeringkat").value.trim();
+    const pingat = $("compPingat").value.trim();
+    const anugerahKhas = $("compHasSpecial").checked ? "yes" : "no";
+    const namaAnugerahKhas = $("compHasSpecial").checked ? $("compSpecialName").value.trim() : "";
+
+    if(!namaEvent) throw new Error("Nama event diperlukan");
+    if(!tahun) throw new Error("Tahun diperlukan");
+    if(!peringkat) throw new Error("Peringkat diperlukan");
+    if(!pingat) throw new Error("Pingat diperlukan");
+
+    if(anugerahKhas === "yes" && !namaAnugerahKhas){
+      throw new Error("Nama anugerah khas diperlukan");
+    }
+
+    const out = await api("addCompetition", {
+      innovationId: state.selectedInnovationId,
+      namaEvent,
+      tahun,
+      peringkat,
+      pingat,
+      anugerahKhas,
+      namaAnugerahKhas
+    });
+
+    if(!out.ok) throw new Error(out.error || "Gagal simpan pertandingan");
+
+    $("compNamaEvent").value = "";
+    $("compTahun").value = "";
+    $("compPeringkat").value = "";
+    $("compPingat").value = "";
+    $("compHasSpecial").checked = false;
+    $("compSpecialName").value = "";
+    $("compSpecialName").classList.add("hidden");
+
+    renderCompetitions();
+  }catch(e){
+    showMsg(e.message || String(e));
+  }
+});
+
+/** Boot after login */
+async function bootAfterLogin(){
+  $("loginView").classList.add("hidden");
+  $("appView").classList.remove("hidden");
+
+  $("userBox").classList.remove("hidden");
+  $("userEmail").textContent = state.email || "";
+  $("userRole").textContent = state.role || "user";
+
+  $("profilEmail").textContent = state.email || "-";
+  $("profilRole").textContent = state.role || "-";
+
+  $("selectedInnovationTitle").textContent = state.selectedInnovationTitle || "-";
+
+  // default tab
+  activateTab("tabInovasi");
+}
+
+$("btnLogout")?.addEventListener("click", () => {
+  clearLocal();
+  location.reload();
+});
+
+$("btnRefresh")?.addEventListener("click", async () => {
+  showMsg("");
+  await renderInnovations();
+  if(state.selectedInnovationId){
+    await renderTeam();
+    await renderCompetitions();
+  }
+});
+
+document.querySelectorAll(".tabBtn").forEach(btn=>{
+  btn.addEventListener("click", ()=> activateTab(btn.dataset.tab));
+});
+
+/** HTML escape */
+function escapeHtml(s){
+  return String(s ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+/** Init */
+(async function init(){
   loadLocal();
-  wireUI();
+
+  // if already have token, verify quickly
+  if(state.token){
+    try{
+      const me = await api("me");
+      if(me.ok){
+        state.email = me.email || state.email;
+        state.role = me.role || state.role;
+        saveLocal();
+        await bootAfterLogin();
+        return;
+      }
+    }catch(e){
+      // ignore -> fallback to login
+      clearLocal();
+    }
+  }
+
+  // show login
+  $("loginView").classList.remove("hidden");
+  $("appView").classList.add("hidden");
+  $("userBox").classList.add("hidden");
+
   initGoogleButton();
-
-  // If session exists, auto boot
-  const ok = await checkSession();
-  if (ok) await bootAfterLogin();
-}
-
-boot();
+})();
