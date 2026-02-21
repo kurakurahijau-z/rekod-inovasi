@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>RI Proxy</title>
+  </head>
+  <body>
+    <script>
+      // Only accept messages from your GitHub Pages origin
+      const ALLOWED_ORIGIN = (function () {
+        // Hardcode for safety; you can change it if needed.
+        return "https://kurakurahijau-z.github.io";
+      })();
+
+      function reply(source, origin, msg) {
+        try {
+          source.postMessage(msg, origin);
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      window.addEventListener("message", (event) => {
+        if (!event || !event.data) return;
+
+        // Security check
+        if (event.origin !== ALLOWED_ORIGIN) {
+          reply(event.source, event.origin, {
+            ok: false,
+            error: "Blocked origin: " + event.origin,
+          });
+          return;
+        }
+
+        const { rid, action, payload } = event.data || {};
+        if (!rid || !action) return;
+
+        google.script.run
+          .withSuccessHandler((res) => {
+            reply(event.source, event.origin, { rid, ...res });
+          })
+          .withFailureHandler((err) => {
+            reply(event.source, event.origin, {
+              rid,
+              ok: false,
+              error: (err && err.message) ? err.message : String(err),
+            });
+          })
+          .api(action, payload || {});
+      });
+
+      // Tell parent iframe is ready
+      try {
+        window.parent.postMessage({ ok: true, proxyReady: true }, ALLOWED_ORIGIN);
+      } catch (e) {}
+    </script>
+  </body>
+</html>
