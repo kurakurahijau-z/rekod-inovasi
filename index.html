@@ -2,50 +2,129 @@
 <html lang="ms">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>Rekod Inovasi Jabatan</title>
-
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="config.js"></script>
 
   <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-  <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system, "Inter", "Segoe UI", Roboto, Arial; }
-  </style>
+  <script src="./config.js"></script>
+  <script src="./app.js" defer></script>
 </head>
 
-<body class="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-  <div class="w-full max-w-xl">
-    <div class="bg-white rounded-2xl shadow p-6">
-      <div class="flex items-center gap-3">
-        <div class="h-12 w-12 rounded-xl bg-emerald-500/20 flex items-center justify-center font-bold text-emerald-700">RI</div>
-        <div>
-          <div class="text-xl font-bold text-slate-900">Rekod Inovasi Jabatan</div>
-          <div class="text-sm text-slate-500">Log masuk guna akaun rasmi @pms.edu.my</div>
-        </div>
-      </div>
+<body class="bg-slate-50 min-h-screen">
+  <div class="max-w-3xl mx-auto px-4 py-8">
 
-      <div class="mt-6 border rounded-xl p-4">
-        <div class="font-semibold text-slate-900 mb-3">Login Google</div>
-
-        <div id="googleBtn"></div>
-
-        <div class="mt-3 text-sm text-slate-500">
-          Nota: sistem akan semak email anda wujud dalam <b>StaffDirectory</b> (whitelist).
+    <!-- LOGIN VIEW -->
+    <div data-view="login" class="hidden">
+      <div class="bg-white border rounded-2xl p-6">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center font-bold text-emerald-700">RI</div>
+          <div>
+            <div class="text-xl font-bold">Rekod Inovasi Jabatan</div>
+            <div class="text-sm text-slate-600">Log masuk guna akaun rasmi <b>@pms.edu.my</b></div>
+          </div>
         </div>
 
-        <div id="status" class="mt-2 text-sm"></div>
-      </div>
-
-      <div class="mt-4 flex items-center justify-between text-xs text-slate-400">
-        <div>© 2026 kurakurahijau.com</div>
-        <div>v1</div>
+        <div class="mt-6">
+          <div class="text-sm font-semibold mb-2">Login Google</div>
+          <div id="googleBtn"></div>
+          <div id="status" class="text-sm mt-2 text-slate-600"></div>
+          <div class="text-xs text-slate-500 mt-3">
+            Nota: sistem akan semak email anda wujud dalam <b>StaffDirectory</b> (whitelist).
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <script src="app.js"></script>
+    <!-- APP VIEW -->
+    <div data-view="app" class="hidden space-y-4">
+      <div class="bg-white border rounded-2xl p-4 flex items-center justify-between">
+        <div>
+          <div class="text-sm text-slate-600">Log masuk sebagai</div>
+          <div class="font-semibold" id="meEmail">-</div>
+          <div class="text-xs text-slate-500">Role: <span id="meRole">user</span></div>
+        </div>
+        <div class="flex gap-2">
+          <button id="refreshBtn" class="px-3 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Refresh</button>
+          <button id="logoutBtn" class="px-3 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm text-red-600">Logout</button>
+        </div>
+      </div>
+
+      <div class="bg-white border rounded-2xl p-4">
+        <div class="font-semibold mb-3">Tambah Inovasi</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <input id="fTajuk" class="border rounded-xl px-3 py-2" placeholder="Tajuk inovasi" />
+          <input id="fTahun" class="border rounded-xl px-3 py-2" placeholder="Tahun (cth 2026)" />
+          <input id="fKategori" class="border rounded-xl px-3 py-2" placeholder="Kategori (cth PRODUK)" />
+          <input id="fStatus" class="border rounded-xl px-3 py-2" placeholder="Status (cth aktif)" />
+          <input id="fMyipoStatus" class="border rounded-xl px-3 py-2" placeholder="MyIPO status (yes/no)" />
+          <input id="fMyipoNumber" class="border rounded-xl px-3 py-2" placeholder="MyIPO number" />
+        </div>
+        <button id="addInnovBtn" class="mt-3 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm hover:bg-emerald-700">
+          Simpan
+        </button>
+      </div>
+
+      <div class="bg-white border rounded-2xl p-4">
+        <div class="font-semibold mb-3">Senarai Inovasi Saya</div>
+        <div id="innovList" class="space-y-3"></div>
+      </div>
+    </div>
+
+    <!-- TEAM VIEW -->
+    <div data-view="team" class="hidden space-y-4">
+      <div class="bg-white border rounded-2xl p-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="font-semibold">Team Members</div>
+            <div class="text-xs text-slate-500">Innovation ID: <span id="teamInnovId"></span></div>
+          </div>
+          <button id="teamBack" class="px-3 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Back</button>
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input id="teamEmail" class="border rounded-xl px-3 py-2" placeholder="memberEmail@pms.edu.my" />
+          <input id="teamName" class="border rounded-xl px-3 py-2" placeholder="Nama" />
+          <input id="teamRole" class="border rounded-xl px-3 py-2" placeholder="Role (cth member)" value="member" />
+        </div>
+        <button id="teamAddBtn" class="mt-3 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm hover:bg-slate-800">
+          Add Member
+        </button>
+
+        <div class="mt-4 space-y-2" id="teamList"></div>
+      </div>
+    </div>
+
+    <!-- COMPETITIONS VIEW -->
+    <div data-view="comps" class="hidden space-y-4">
+      <div class="bg-white border rounded-2xl p-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="font-semibold">Rekod Pertandingan</div>
+            <div class="text-xs text-slate-500">Innovation ID: <span id="compInnovId"></span></div>
+          </div>
+          <button id="compBack" class="px-3 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Back</button>
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <input id="cNamaEvent" class="border rounded-xl px-3 py-2" placeholder="Nama event" />
+          <input id="cTahun" class="border rounded-xl px-3 py-2" placeholder="Tahun" />
+          <input id="cPeringkat" class="border rounded-xl px-3 py-2" placeholder="Peringkat (cth ANTARABANGSA)" />
+          <input id="cPingat" class="border rounded-xl px-3 py-2" placeholder="Pingat (cth GOLD)" />
+          <input id="cAnugerahKhas" class="border rounded-xl px-3 py-2" placeholder="Anugerah khas (yes/no)" />
+          <input id="cNamaAnugerahKhas" class="border rounded-xl px-3 py-2" placeholder="Nama anugerah khas" />
+        </div>
+
+        <button id="compAddBtn" class="mt-3 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm hover:bg-indigo-700">
+          Simpan Rekod
+        </button>
+
+        <div class="mt-4 space-y-2" id="compList"></div>
+      </div>
+    </div>
+
+  </div>
 </body>
 </html>
