@@ -1,379 +1,629 @@
-// app.js
-(() => {
-  const cfg = window.APP_CONFIG;
+/* app.js - Rekod Inovasi Jabatan (Frontend)
+ * - Google login (GIS)
+ * - Innovations CRUD (basic)
+ * - Team member (StaffDirectory dropdown search)
+ * - Competitions (pingat dropdown + anugerah khas)
+ */
 
-  const $ = (sel) => document.querySelector(sel);
-  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, m => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
-  }[m]));
+const CFG = window.APP_CONFIG || {};
+const API_BASE = CFG.API_BASE;
+const GOOGLE_CLIENT_ID = CFG.GOOGLE_CLIENT_ID;
+const ALLOWED_DOMAIN = (CFG.ALLOWED_DOMAIN || "").toLowerCase().trim();
 
-  const store = {
-    get token(){ return localStorage.getItem("ri_token") || ""; },
-    set token(v){ localStorage.setItem("ri_token", v || ""); },
-    get email(){ return localStorage.getItem("ri_email") || ""; },
-    set email(v){ localStorage.setItem("ri_email", v || ""); },
-    get role(){ return localStorage.getItem("ri_role") || ""; },
-    set role(v){ localStorage.setItem("ri_role", v || ""); },
-    clear(){ localStorage.removeItem("ri_token"); localStorage.removeItem("ri_email"); localStorage.removeItem("ri_role"); }
-  };
+const store = {
+  token: localStorage.getItem("ri_token") || "",
+  email: localStorage.getItem("ri_email") || "",
+  role: localStorage.getItem("ri_role") || "",
+  selectedInnovation: localStorage.getItem("ri_selectedInnovation") || "",
+  selectedInnovationTitle: localStorage.getItem("ri_selectedInnovationTitle") || "",
+};
 
-  // ===== JSONP core =====
-  function jsonp(url) {
-    return new Promise((resolve, reject) => {
-      const cbName = "cb_" + Math.random().toString(36).slice(2);
-      const s = document.createElement("script");
-      const sep = url.includes("?") ? "&" : "?";
-      s.src = `${url}${sep}callback=${cbName}`;
-      s.async = true;
+function $(sel){ return document.querySelector(sel); }
+function $all(sel){ return Array.from(document.querySelectorAll(sel)); }
 
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error("Proxy timeout"));
-      }, 15000);
+function esc(s){
+  return String(s ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#39;");
+}
 
-      function cleanup() {
-        clearTimeout(timeout);
-        try { delete window[cbName]; } catch(_) { window[cbName] = undefined; }
-        if (s && s.parentNode) s.parentNode.removeChild(s);
+function setAlert(type, msg){
+  const el = $("#alert");
+  if (!el) return;
+  if (!msg){
+    el.className = "hidden mb-5 p-3 rounded-xl border text-sm";
+    el.textContent = "";
+    return;
+  }
+  const base = "mb-5 p-3 rounded-xl border text-sm";
+  const cls = type === "ok"
+    ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+    : "bg-rose-50 border-rose-200 text-rose-900";
+  el.className = `${base} ${cls}`;
+  el.textContent = msg;
+}
+
+function saveSession(){
+  localStorage.setItem("ri_token", store.token || "");
+  localStorage.setItem("ri_email", store.email || "");
+  localStorage.setItem("ri_role", store.role || "");
+  localStorage.setItem("ri_selectedInnovation", store.selectedInnovation || "");
+  localStorage.setItem("ri_selectedInnovationTitle", store.selectedInnovationTitle || "");
+}
+
+function clearSession(){
+  store.token = ""; store.email = ""; store.role = "";
+  saveSession();
+}
+
+async function api(action, params = {}, method = "GET"){
+  const url = new URL(API_BASE);
+  url.searchParams.set("action", action);
+
+  if (method === "GET"){
+    Object.entries(params).forEach(([k,v])=>{
+      if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+    });
+    const res = await fetch(url.toString(), { method: "GET", mode: "cors" });
+    const txt = await res.text();
+    let json;
+    try { json = JSON.parse(txt); } catch { throw new Error("Invalid JSON: " + txt); }
+    if (!json.ok) throw new Error(json.error || "Request failed");
+    return json;
+  }
+
+  // POST (JSON)
+  Object.entries(params).forEach(([k,v])=>{
+    if (v !== undefined && v !== null && k !== "body") url.searchParams.set(k, String(v));
+  });
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    mode: "cors",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params.body || {})
+  });
+  const txt = await res.text();
+  let json;
+  try { json = JSON.parse(txt); } catch { throw new Error("Invalid JSON: " + txt); }
+  if (!json.ok) throw new Error(json.error || "Request failed");
+  return json;
+}
+
+function showLogin(){
+  $("#viewLogin").classList.remove("hidden");
+  $("#viewApp").classList.add("hidden");
+  $("#topRight").classList.add("hidden");
+}
+
+function showApp(){
+  $("#viewLogin").classList.add("hidden");
+  $("#viewApp").classList.remove("hidden");
+  $("#topRight").classList.remove("hidden");
+}
+
+function setMeUI(){
+  $("#meEmail").textContent = store.email || "";
+  $("#meRole").textContent = store.role ? `role: ${store.role}` : "";
+  $("#pEmail").textContent = store.email || "—";
+  $("#pRole").textContent = store.role || "—";
+  $("#pToken").textContent = store.token || "—";
+
+  $("#teamInvTitle").textContent = store.selectedInnovationTitle || "—";
+  $("#compInvTitle").textContent = store.selectedInnovationTitle || "—";
+}
+
+function setTab(tabId){
+  $all(".tabPane").forEach(p=>p.classList.add("hidden"));
+  $(`#${tabId}`).classList.remove("hidden");
+
+  // button styling
+  $all(".tabBtn").forEach(b=>{
+    b.classList.remove("bg-slate-900","text-white");
+    b.classList.add("hover:bg-slate-100");
+  });
+  const btn = $(`.tabBtn[data-tab="${tabId}"]`);
+  if (btn){
+    btn.classList.add("bg-slate-900","text-white");
+    btn.classList.remove("hover:bg-slate-100");
+  }
+}
+
+function bindTabs(){
+  $all(".tabBtn").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const tab = btn.dataset.tab;
+      setTab(tab);
+
+      if (tab === "tabInnovations") await loadInnovations();
+      if (tab === "tabTeam") await loadTeam();
+      if (tab === "tabCompetitions") await loadCompetitions();
+      setAlert("", "");
+    });
+  });
+}
+
+/* -------------------------
+   Google Login (GIS)
+------------------------- */
+function initGSI(){
+  if (!window.google || !google.accounts || !google.accounts.id) return;
+
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: async (resp)=>{
+      try{
+        setAlert("", "");
+        const credential = resp.credential;
+        if (!credential) throw new Error("Missing credential");
+
+        // Login via backend (GET)
+        const r = await api("loginGoogle", { credential }, "GET");
+
+        // Domain check (frontend safety; backend patut check juga)
+        const email = String(r.email || "").toLowerCase().trim();
+        if (ALLOWED_DOMAIN && !email.endsWith("@"+ALLOWED_DOMAIN)){
+          throw new Error("Email bukan domain dibenarkan: " + ALLOWED_DOMAIN);
+        }
+
+        store.token = r.token;
+        store.email = r.email;
+        store.role = r.role || "user";
+        saveSession();
+
+        setMeUI();
+        showApp();
+        setTab("tabInnovations");
+        await loadInnovations();
+        setAlert("ok", "Login berjaya.");
+      }catch(e){
+        console.error(e);
+        setAlert("err", "Login gagal: " + (e.message || e));
       }
-
-      window[cbName] = (data) => {
-        cleanup();
-        resolve(data);
-      };
-
-      s.onerror = () => {
-        cleanup();
-        reject(new Error("Network error"));
-      };
-
-      document.body.appendChild(s);
-    });
-  }
-
-  function b64url(obj){
-    const json = JSON.stringify(obj || {});
-    const bytes = new TextEncoder().encode(json);
-    let bin = "";
-    bytes.forEach(b => bin += String.fromCharCode(b));
-    const b64 = btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
-    return b64;
-  }
-
-  async function api(action, params = {}, payloadObj = null) {
-    const u = new URL(cfg.API_BASE);
-    u.searchParams.set("action", action);
-
-    Object.entries(params || {}).forEach(([k,v]) => {
-      if (v !== undefined && v !== null && String(v).trim() !== "") u.searchParams.set(k, v);
-    });
-
-    if (payloadObj) u.searchParams.set("payload", b64url(payloadObj));
-
-    const data = await jsonp(u.toString());
-    if (!data || data.ok !== true) throw new Error((data && data.error) ? data.error : "Request failed");
-    return data;
-  }
-
-  // ===== UI =====
-  function setStatus(msg, type="info"){
-    const el = $("#status");
-    if (!el) return;
-    el.textContent = msg || "";
-    el.className = "text-sm mt-2 " + (type==="err" ? "text-red-600" : type==="ok" ? "text-green-700" : "text-slate-600");
-  }
-
-  function show(view){
-    document.querySelectorAll("[data-view]").forEach(v => v.classList.add("hidden"));
-    $(`[data-view="${view}"]`)?.classList.remove("hidden");
-  }
-
-  async function boot(){
-    // render Google button
-    if (!window.google || !google.accounts || !google.accounts.id) {
-      setStatus("Google Identity script belum load. Refresh page.", "err");
-      return;
     }
+  });
 
-    google.accounts.id.initialize({
-      client_id: cfg.GOOGLE_CLIENT_ID,
-      callback: onGoogleCredential,
-      auto_select: false,
-      cancel_on_tap_outside: true
-    });
+  google.accounts.id.renderButton(
+    document.getElementById("gsiBtn"),
+    { theme: "outline", size: "large", width: 320, shape: "pill" }
+  );
+}
 
-    google.accounts.id.renderButton(
-      $("#googleBtn"),
-      { theme: "outline", size: "large", width: 320 }
-    );
-
-    // if already logged in
-    if (store.token) {
-      try {
-        const me = await api("me", { token: store.token });
-        store.email = me.email;
-        store.role = me.role;
-        await loadDashboard();
-        return;
-      } catch(e) {
-        store.clear();
-      }
-    }
-
-    show("login");
+async function bootMe(){
+  if (!store.token) return false;
+  try{
+    const r = await api("me", { token: store.token }, "GET");
+    store.email = r.email || store.email;
+    store.role = r.role || store.role;
+    saveSession();
+    return true;
+  }catch(e){
+    console.warn("me() failed:", e);
+    clearSession();
+    return false;
   }
+}
 
-  async function onGoogleCredential(resp){
-    try{
-      setStatus("Login sedang diproses…");
-      const out = await api("loginGoogle", { credential: resp.credential });
-      store.token = out.token;
-      store.email = out.email;
-      store.role = out.role;
-      setStatus("Login berjaya ✅", "ok");
-      await loadDashboard();
-    }catch(e){
-      setStatus("Login gagal: " + e.message, "err");
-    }
-  }
+/* -------------------------
+   Innovations
+------------------------- */
+function invCard(item){
+  const id = item.id;
+  const chosen = store.selectedInnovation === id;
 
-  async function loadDashboard(){
-    show("app");
-    $("#meEmail").textContent = store.email || "-";
-    $("#meRole").textContent = store.role || "user";
-    await refreshInnovations();
-  }
-
-  async function refreshInnovations(){
-    $("#innovList").innerHTML = `<div class="text-slate-500 text-sm">Loading…</div>`;
-    try{
-      const res = await api("listMyInnovations", { token: store.token });
-      renderInnovations(res.items || []);
-    }catch(e){
-      $("#innovList").innerHTML = `<div class="text-red-600 text-sm">Gagal load: ${esc(e.message)}</div>`;
-    }
-  }
-
-  function renderInnovations(items){
-    if (!items.length) {
-      $("#innovList").innerHTML = `<div class="text-slate-500 text-sm">Belum ada rekod inovasi.</div>`;
-      return;
-    }
-
-    $("#innovList").innerHTML = items.map(x => `
-      <div class="border rounded-xl p-3 bg-white">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <div class="font-semibold">${esc(x.tajuk)}</div>
-            <div class="text-xs text-slate-600 mt-1">
-              <span class="inline-block mr-2">Tahun: <b>${esc(x.tahun)}</b></span>
-              <span class="inline-block mr-2">Kategori: <b>${esc(x.kategori)}</b></span>
-              <span class="inline-block mr-2">Status: <b>${esc(x.status)}</b></span>
-            </div>
-            <div class="text-xs text-slate-500 mt-1">ID: ${esc(x.innovationId)}</div>
-          </div>
-          <div class="flex flex-col gap-2">
-            <button class="px-3 py-1 rounded-lg border text-sm hover:bg-slate-50" data-act="team" data-id="${esc(x.innovationId)}">Team</button>
-            <button class="px-3 py-1 rounded-lg border text-sm hover:bg-slate-50" data-act="comps" data-id="${esc(x.innovationId)}">Pertandingan</button>
-            <button class="px-3 py-1 rounded-lg border text-sm text-red-600 hover:bg-red-50" data-act="del" data-id="${esc(x.innovationId)}">Delete</button>
-          </div>
+  return `
+  <div class="border rounded-2xl p-4 bg-white ${chosen ? "ring-2 ring-emerald-200" : ""}">
+    <div class="flex items-start justify-between gap-3">
+      <div>
+        <div class="font-semibold">${esc(item.tajuk || "-")}</div>
+        <div class="text-sm text-slate-600">
+          <span class="font-medium">${esc(item.tahun || "-")}</span>
+          • ${esc(item.kategori || "-")}
+          • <span class="px-2 py-0.5 rounded-lg border text-xs">${esc(item.status || "-")}</span>
+        </div>
+        <div class="text-xs text-slate-500 mt-1">
+          MYIPO: ${esc(item.myipoStatus || "")} ${item.myipoNumber ? "• "+esc(item.myipoNumber) : ""}
         </div>
       </div>
-    `).join("");
 
-    $("#innovList").querySelectorAll("button[data-act]").forEach(btn=>{
-      btn.addEventListener("click", async () => {
-        const act = btn.getAttribute("data-act");
-        const id = btn.getAttribute("data-id");
-        if (act === "del") return delInnovation(id);
-        if (act === "team") return openTeam(id);
-        if (act === "comps") return openComps(id);
+      <div class="flex flex-col gap-2">
+        <button class="btnPickInv px-3 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm" data-id="${esc(id)}" data-title="${esc(item.tajuk || "")}">
+          ${chosen ? "Dipilih" : "Pilih"}
+        </button>
+        <button class="btnDelInv px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm" data-id="${esc(id)}">
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+  `;
+}
+
+async function loadInnovations(){
+  try{
+    const r = await api("listMyInnovations", { token: store.token }, "GET");
+    const items = r.items || [];
+    const wrap = $("#invList");
+    wrap.innerHTML = items.map(invCard).join("");
+
+    $("#invEmpty").classList.toggle("hidden", items.length > 0);
+
+    // bind pick
+    $all(".btnPickInv").forEach(b=>{
+      b.addEventListener("click", async ()=>{
+        store.selectedInnovation = b.dataset.id;
+        store.selectedInnovationTitle = b.dataset.title || "";
+        saveSession();
+        setMeUI();
+        await loadInnovations();
+        setAlert("ok", "Inovasi dipilih: " + (store.selectedInnovationTitle || store.selectedInnovation));
       });
     });
+
+    // bind delete
+    $all(".btnDelInv").forEach(b=>{
+      b.addEventListener("click", async ()=>{
+        const id = b.dataset.id;
+        if (!confirm("Delete inovasi ini?")) return;
+        try{
+          await api("deleteInnovation", { token: store.token, body: { id } }, "POST");
+          if (store.selectedInnovation === id){
+            store.selectedInnovation = "";
+            store.selectedInnovationTitle = "";
+            saveSession();
+            setMeUI();
+          }
+          await loadInnovations();
+          setAlert("ok", "Inovasi dibuang.");
+        }catch(e){
+          setAlert("err", e.message || String(e));
+        }
+      });
+    });
+
+  }catch(e){
+    console.error(e);
+    setAlert("err", e.message || String(e));
   }
+}
 
-  async function delInnovation(innovationId){
-    if (!confirm("Confirm delete inovasi ini?")) return;
+function bindAddInnovation(){
+  const cb = $("#fMyipo");
+  const myipoNo = $("#fMyipoNo");
+
+  cb.onchange = () => {
+    if (cb.checked) myipoNo.classList.remove("hidden");
+    else { myipoNo.classList.add("hidden"); myipoNo.value = ""; }
+  };
+
+  $("#btnAddInv").onclick = async ()=>{
     try{
-      await api("deleteInnovation", { token: store.token }, { innovationId });
-      await refreshInnovations();
-    }catch(e){
-      alert("Delete gagal: " + e.message);
-    }
-  }
+      setAlert("", "");
+      const tajuk = $("#fTajuk").value.trim();
+      const tahun = $("#fTahun").value.trim();
+      const kategori = $("#fKategori").value.trim();
+      const status = $("#fStatus").value.trim();
+      const myipoStatus = cb.checked ? "yes" : "no";
+      const myipoNumber = myipoNo.value.trim();
 
-  // ===== Add innovation =====
-  async function addInnovationFromForm(){
-    const tajuk = $("#fTajuk").value.trim();
-    const tahun = $("#fTahun").value.trim();
-    const kategori = $("#fKategori").value.trim();
-    const status = $("#fStatus").value.trim();
-    const myipoStatus = $("#fMyipoStatus").value.trim();
-    const myipoNumber = $("#fMyipoNumber").value.trim();
+      if (!tajuk) throw new Error("Tajuk diperlukan");
+      if (!tahun) throw new Error("Tahun diperlukan");
 
-    try{
-      await api("addInnovation", { token: store.token }, { tajuk, tahun, kategori, status, myipoStatus, myipoNumber });
+      await api("addInnovation", {
+        token: store.token,
+        body: { tajuk, tahun, kategori, status, myipoStatus, myipoNumber }
+      }, "POST");
+
       $("#fTajuk").value = "";
       $("#fTahun").value = "";
       $("#fKategori").value = "";
       $("#fStatus").value = "";
-      $("#fMyipoStatus").value = "";
-      $("#fMyipoNumber").value = "";
-      await refreshInnovations();
+      cb.checked = false;
+      myipoNo.value = "";
+      myipoNo.classList.add("hidden");
+
+      await loadInnovations();
+      setAlert("ok", "Inovasi berjaya ditambah.");
     }catch(e){
-      alert("Add gagal: " + e.message);
+      setAlert("err", e.message || String(e));
     }
+  };
+}
+
+/* -------------------------
+   Team
+------------------------- */
+function needSelected(){
+  if (!store.selectedInnovation){
+    setAlert("err", "Pilih inovasi dulu kat tab Inovasi.");
+    return false;
   }
+  return true;
+}
 
-  // ===== Team UI =====
-  async function openTeam(innovationId){
-    show("team");
-    $("#teamInnovId").textContent = innovationId;
-    $("#teamList").innerHTML = `<div class="text-slate-500 text-sm">Loading…</div>`;
-    try{
-      const res = await api("listTeam", { token: store.token, innovationId });
-      renderTeam(res.items || [], innovationId);
-    }catch(e){
-      $("#teamList").innerHTML = `<div class="text-red-600 text-sm">Gagal load team: ${esc(e.message)}</div>`;
-    }
-  }
+function teamRow(item){
+  return `
+    <div class="border rounded-2xl p-4 bg-white flex items-start justify-between gap-3">
+      <div>
+        <div class="font-semibold">${esc(item.nama || item.memberName || "-")}</div>
+        <div class="text-sm text-slate-600">${esc(item.email || item.memberEmail || "-")}</div>
+        <div class="text-xs text-slate-500 mt-1">Peranan: ${esc(item.peranan || item.roleInTeam || "-")}</div>
+      </div>
+      <button class="btnDelTeam px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm"
+        data-id="${esc(item.id)}">
+        Remove
+      </button>
+    </div>
+  `;
+}
 
-  function renderTeam(items, innovationId){
-    if (!items.length) {
-      $("#teamList").innerHTML = `<div class="text-slate-500 text-sm">Belum ada team member.</div>`;
-    } else {
-      $("#teamList").innerHTML = items.map(m => `
-        <div class="border rounded-lg p-2 bg-white flex items-center justify-between gap-2">
-          <div>
-            <div class="text-sm font-medium">${esc(m.memberName || "-")}</div>
-            <div class="text-xs text-slate-600">${esc(m.memberEmail)}</div>
-            <div class="text-xs text-slate-500">Role: ${esc(m.roleInTeam)}</div>
-          </div>
-          <button class="px-3 py-1 rounded-lg border text-sm text-red-600 hover:bg-red-50" data-teamdel="${esc(m.teamId)}">Remove</button>
-        </div>
-      `).join("");
+async function loadTeam(){
+  if (!needSelected()) return;
 
-      $("#teamList").querySelectorAll("button[data-teamdel]").forEach(b=>{
-        b.addEventListener("click", async ()=>{
-          const teamId = b.getAttribute("data-teamdel");
-          if (!confirm("Remove member ni?")) return;
-          try{
-            await api("deleteTeam", { token: store.token }, { teamId, innovationId });
-            await openTeam(innovationId);
-          }catch(e){
-            alert("Remove gagal: " + e.message);
-          }
-        });
+  try{
+    const r = await api("listTeam", {
+      token: store.token,
+      innovationId: store.selectedInnovation
+    }, "GET");
+
+    const items = r.items || [];
+    $("#teamList").innerHTML = items.map(teamRow).join("");
+    $("#teamEmpty").classList.toggle("hidden", items.length > 0);
+
+    $all(".btnDelTeam").forEach(btn=>{
+      btn.addEventListener("click", async ()=>{
+        const id = btn.dataset.id;
+        if (!confirm("Remove member ini?")) return;
+        try{
+          await api("deleteTeam", { token: store.token, body: { id, innovationId: store.selectedInnovation } }, "POST");
+          await loadTeam();
+          setAlert("ok", "Member dibuang.");
+        }catch(e){
+          setAlert("err", e.message || String(e));
+        }
       });
-    }
+    });
 
-    $("#teamAddBtn").onclick = async () => {
-      const memberEmail = $("#teamEmail").value.trim().toLowerCase();
-      const memberName = $("#teamName").value.trim();
-      const roleInTeam = $("#teamRole").value.trim() || "member";
+    bindTeamDropdown(); // ensure dropdown bind
+
+  }catch(e){
+    console.error(e);
+    setAlert("err", e.message || String(e));
+  }
+}
+
+function bindTeamDropdown(){
+  const teamSearch = $("#teamSearch");
+  const teamSuggest = $("#teamSuggest");
+  const teamEmail = $("#teamEmail");
+  const teamName = $("#teamName");
+
+  if (!teamSearch || !teamSuggest) return;
+
+  let timer = null;
+
+  function hide(){
+    teamSuggest.classList.add("hidden");
+    teamSuggest.innerHTML = "";
+  }
+
+  function render(items){
+    if (!items || !items.length){ hide(); return; }
+
+    teamSuggest.innerHTML = items.map(x => `
+      <button type="button"
+        class="w-full text-left px-3 py-2 hover:bg-slate-50 border-b last:border-b-0"
+        data-email="${esc(x.email)}"
+        data-nama="${esc(x.name || x.nama || "")}">
+        <div class="text-sm font-medium">${esc(x.name || x.nama || "-")}</div>
+        <div class="text-xs text-slate-600">${esc(x.email)} ${x.jawatan ? "• "+esc(x.jawatan) : ""}</div>
+      </button>
+    `).join("");
+
+    teamSuggest.classList.remove("hidden");
+
+    teamSuggest.querySelectorAll("button[data-email]").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        const email = b.getAttribute("data-email");
+        const nama = b.getAttribute("data-nama");
+        teamEmail.value = email;
+        teamName.value = nama;
+        teamSearch.value = `${nama} (${email})`;
+        hide();
+      });
+    });
+  }
+
+  teamSearch.oninput = ()=>{
+    clearTimeout(timer);
+    const q = teamSearch.value.trim();
+    if (q.length < 2){ hide(); return; }
+
+    timer = setTimeout(async ()=>{
       try{
-        await api("addTeam", { token: store.token }, { innovationId, memberEmail, memberName, roleInTeam });
-        $("#teamEmail").value = "";
-        $("#teamName").value = "";
-        $("#teamRole").value = "member";
-        await openTeam(innovationId);
+        const r = await api("searchStaff", { token: store.token, q }, "GET");
+        render(r.items || []);
       }catch(e){
-        alert("Add team gagal: " + e.message);
+        hide();
       }
-    };
+    }, 250);
+  };
 
-    $("#teamBack").onclick = () => show("app");
-  }
+  teamSearch.onblur = ()=> setTimeout(hide, 180);
 
-  // ===== Competitions UI =====
-  async function openComps(innovationId){
-    show("comps");
-    $("#compInnovId").textContent = innovationId;
-    $("#compList").innerHTML = `<div class="text-slate-500 text-sm">Loading…</div>`;
+  $("#btnAddTeam").onclick = async ()=>{
     try{
-      const res = await api("listCompetitions", { token: store.token, innovationId });
-      renderComps(res.items || [], innovationId);
+      if (!needSelected()) return;
+      setAlert("", "");
+
+      const email = teamEmail.value.trim().toLowerCase();
+      const nama = teamName.value.trim();
+      const peranan = $("#teamRole").value.trim();
+
+      if (!email) throw new Error("Sila pilih staf dari dropdown (email kosong).");
+
+      await api("addTeam", {
+        token: store.token,
+        body: { innovationId: store.selectedInnovation, email, nama, peranan }
+      }, "POST");
+
+      teamSearch.value = "";
+      teamEmail.value = "";
+      teamName.value = "";
+      $("#teamRole").value = "";
+
+      await loadTeam();
+      setAlert("ok", "Team member ditambah.");
     }catch(e){
-      $("#compList").innerHTML = `<div class="text-red-600 text-sm">Gagal load: ${esc(e.message)}</div>`;
+      setAlert("err", e.message || String(e));
     }
-  }
+  };
+}
 
-  function renderComps(items, innovationId){
-    if (!items.length) {
-      $("#compList").innerHTML = `<div class="text-slate-500 text-sm">Belum ada rekod pertandingan.</div>`;
-    } else {
-      $("#compList").innerHTML = items.map(c => `
-        <div class="border rounded-lg p-2 bg-white flex items-start justify-between gap-2">
-          <div>
-            <div class="text-sm font-semibold">${esc(c.namaEvent || "-")}</div>
-            <div class="text-xs text-slate-600 mt-1">
-              Tahun: <b>${esc(c.tahun)}</b> • Peringkat: <b>${esc(c.peringkat)}</b> • Pingat: <b>${esc(c.pingat)}</b>
-            </div>
-            <div class="text-xs text-slate-500 mt-1">
-              Anugerah khas: ${esc(c.anugerahKhas)} ${c.namaAnugerahKhas ? "— "+esc(c.namaAnugerahKhas) : ""}
-            </div>
-            <div class="text-xs text-slate-500 mt-1">ID: ${esc(c.compId)}</div>
-          </div>
-          <button class="px-3 py-1 rounded-lg border text-sm text-red-600 hover:bg-red-50" data-compdel="${esc(c.compId)}">Delete</button>
+/* -------------------------
+   Competitions
+   NOTE: tukar action name kalau backend kau lain
+------------------------- */
+function compRow(item){
+  const pingat = item.pingat || item.medal || "";
+  const ak = (item.anugerahKhas || item.specialAward || "").toLowerCase() === "yes";
+  const namaAK = item.namaAnugerahKhas || item.specialAwardName || "";
+
+  return `
+    <div class="border rounded-2xl p-4 bg-white flex items-start justify-between gap-3">
+      <div>
+        <div class="font-semibold">${esc(item.namaEvent || item.eventName || "-")}</div>
+        <div class="text-sm text-slate-600">${esc(item.tahun || "-")} • ${esc(item.peringkat || "-")} • <span class="font-medium">${esc(pingat || "-")}</span></div>
+        <div class="text-xs text-slate-500 mt-1">
+          Anugerah khas: ${ak ? "yes" : "no"} ${ak && namaAK ? "• "+esc(namaAK) : ""}
         </div>
-      `).join("");
+      </div>
+      <button class="btnDelComp px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm"
+        data-id="${esc(item.compId || item.id || item.competitionId || "")}">
+        Delete
+      </button>
+    </div>
+  `;
+}
 
-      $("#compList").querySelectorAll("button[data-compdel]").forEach(b=>{
-        b.addEventListener("click", async ()=>{
-          const compId = b.getAttribute("data-compdel");
-          if (!confirm("Delete rekod pertandingan ni?")) return;
-          try{
-            await api("deleteCompetition", { token: store.token }, { compId, innovationId });
-            await openComps(innovationId);
-          }catch(e){
-            alert("Delete gagal: " + e.message);
-          }
-        });
+async function loadCompetitions(){
+  if (!needSelected()) return;
+
+  try{
+    // ✅ pastikan backend ada action ni; kalau lain, tukar kat sini
+    const r = await api("listCompetitions", {
+      token: store.token,
+      innovationId: store.selectedInnovation
+    }, "GET");
+
+    const items = r.items || [];
+    $("#compList").innerHTML = items.map(compRow).join("");
+    $("#compEmpty").classList.toggle("hidden", items.length > 0);
+
+    $all(".btnDelComp").forEach(btn=>{
+      btn.addEventListener("click", async ()=>{
+        const id = btn.dataset.id;
+        if (!id) return setAlert("err", "Missing competition id (compId).");
+        if (!confirm("Delete rekod pertandingan ini?")) return;
+
+        try{
+          // ✅ tukar kalau backend lain
+          await api("deleteCompetition", { token: store.token, body: { compId: id, innovationId: store.selectedInnovation } }, "POST");
+          await loadCompetitions();
+          setAlert("ok", "Rekod pertandingan dibuang.");
+        }catch(e){
+          setAlert("err", e.message || String(e));
+        }
       });
-    }
+    });
 
-    $("#compAddBtn").onclick = async () => {
+  }catch(e){
+    console.error(e);
+    setAlert("err", e.message || String(e));
+  }
+}
+
+function bindCompetitionsForm(){
+  const cb = $("#cAnugerahKhas");
+  const box = $("#cNamaAnugerahKhas");
+
+  cb.onchange = ()=>{
+    if (cb.checked) box.classList.remove("hidden");
+    else { box.classList.add("hidden"); box.value = ""; }
+  };
+
+  $("#btnAddComp").onclick = async ()=>{
+    try{
+      if (!needSelected()) return;
+      setAlert("", "");
+
       const namaEvent = $("#cNamaEvent").value.trim();
       const tahun = $("#cTahun").value.trim();
       const peringkat = $("#cPeringkat").value.trim();
       const pingat = $("#cPingat").value.trim();
-      const anugerahKhas = $("#cAnugerahKhas").value.trim();
-      const namaAnugerahKhas = $("#cNamaAnugerahKhas").value.trim();
 
-      try{
-        await api("addCompetition", { token: store.token }, {
-          innovationId, namaEvent, tahun, peringkat, pingat, anugerahKhas, namaAnugerahKhas
-        });
+      const anugerahKhas = cb.checked ? "yes" : "no";
+      const namaAnugerahKhas = box.value.trim();
 
-        $("#cNamaEvent").value = "";
-        $("#cTahun").value = "";
-        $("#cPeringkat").value = "";
-        $("#cPingat").value = "";
-        $("#cAnugerahKhas").value = "";
-        $("#cNamaAnugerahKhas").value = "";
+      if (!namaEvent) throw new Error("Nama event diperlukan.");
+      if (!tahun) throw new Error("Tahun diperlukan.");
 
-        await openComps(innovationId);
-      }catch(e){
-        alert("Add gagal: " + e.message);
-      }
-    };
+      // ✅ tukar action kalau backend lain
+      await api("addCompetition", {
+        token: store.token,
+        body: {
+          innovationId: store.selectedInnovation,
+          namaEvent, tahun, peringkat, pingat,
+          anugerahKhas, namaAnugerahKhas
+        }
+      }, "POST");
 
-    $("#compBack").onclick = () => show("app");
+      $("#cNamaEvent").value = "";
+      $("#cTahun").value = "";
+      $("#cPeringkat").value = "";
+      $("#cPingat").value = "";
+      cb.checked = false;
+      box.value = "";
+      box.classList.add("hidden");
+
+      await loadCompetitions();
+      setAlert("ok", "Pertandingan berjaya ditambah.");
+    }catch(e){
+      setAlert("err", e.message || String(e));
+    }
+  };
+}
+
+/* -------------------------
+   Boot
+------------------------- */
+document.addEventListener("DOMContentLoaded", async ()=>{
+  setAlert("", "");
+  bindTabs();
+
+  $("#btnLogout").onclick = ()=>{
+    clearSession();
+    setAlert("ok", "Dah logout.");
+    showLogin();
+  };
+
+  $("#btnRefreshInv").onclick = loadInnovations;
+  $("#btnRefreshTeam").onclick = loadTeam;
+  $("#btnRefreshComp").onclick = loadCompetitions;
+
+  bindAddInnovation();
+  bindCompetitionsForm();
+
+  const ok = await bootMe();
+  if (ok){
+    setMeUI();
+    showApp();
+    setTab("tabInnovations");
+    await loadInnovations();
+  }else{
+    showLogin();
+    initGSI();
   }
-
-  // ===== buttons =====
-  function bind(){
-    $("#logoutBtn").addEventListener("click", ()=>{
-      store.clear();
-      location.reload();
-    });
-    $("#addInnovBtn").addEventListener("click", addInnovationFromForm);
-    $("#refreshBtn").addEventListener("click", refreshInnovations);
-  }
-
-  window.addEventListener("load", () => {
-    bind();
-    boot();
-  });
-
-})();
+});
