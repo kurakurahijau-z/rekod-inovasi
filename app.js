@@ -2,9 +2,6 @@
  * Rekod Inovasi Jabatan — FRONTEND app.js (GitHub Pages)
  * - Calls Google Apps Script API (window.APP_CONFIG.API_BASE)
  * - Stores session token in localStorage
- * - Provides functions used by:
- *   index.html, dashboard.html, add-innovation.html,
- *   team.html, add-competition.html
  * ====================================================== */
 
 const API = () => String(window.APP_CONFIG?.API_BASE || "").trim();
@@ -38,6 +35,7 @@ async function apiGet(action, params = {}) {
   return json;
 }
 
+// NOTE: keep as JSON POST for now (we'll harden later if needed)
 async function apiPostWithToken(action, token, body) {
   const base = API();
   if (!base) throw new Error("API_BASE kosong dalam config.js");
@@ -87,6 +85,17 @@ function esc(s) {
     .replaceAll("'", "&#039;");
 }
 function escAttr(s) { return esc(s).replaceAll("\n", " "); }
+
+// helper: robust email normalize
+function normEmail_(s) {
+  // sometimes backend might return something unexpected -> we normalize hard
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^mailto:/, "")
+    .replace(/\s+/g, ""); // remove spaces
+}
+
 /* ======================================================
    GOOGLE LOGIN CALLBACK (index.html)
 ====================================================== */
@@ -107,11 +116,24 @@ async function onGoogleCredentialResponse(resp) {
     const out = await apiGet("loginGoogle", { credential });
     if (!out.ok) { setStatus(out.error || "Login gagal", true); return; }
 
-    const email = String(out.email || "").toLowerCase();
+    // robust email handling
+    const email = normEmail_(out.email || "");
     const allowed = ALLOWED_DOMAIN();
-    if (allowed && !email.endsWith("@" + allowed)) {
-      setStatus("Email bukan domain @" + allowed, true);
+
+    if (!email) {
+      setStatus("Login gagal: email kosong dari server", true);
+      console.error("loginGoogle response:", out);
       return;
+    }
+
+    if (allowed) {
+      const suffix = "@" + allowed;
+      if (!email.endsWith(suffix)) {
+        // show debug hint (still user-friendly)
+        setStatus(`Email bukan domain ${suffix}. (server email: ${email})`, true);
+        console.error("Domain check failed. out=", out);
+        return;
+      }
     }
 
     setToken(out.token || "");
@@ -179,6 +201,7 @@ async function refreshMyInnovations() {
     </tr>
   `).join("");
 }
+
 async function refreshReport(year) {
   const token = getToken();
   setText("rYear", year);
@@ -289,6 +312,7 @@ async function submitInnovation(ev) {
   if (msg) msg.textContent = "Berjaya simpan. Redirect ke dashboard…";
   setTimeout(() => location.href = "./dashboard.html", 600);
 }
+
 /* ======================================================
    TEAM (team.html)
 ====================================================== */
