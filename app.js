@@ -1,583 +1,718 @@
-const CFG = window.APP_CONFIG || {};
-const $ = (id) => document.getElementById(id);
+(() => {
+  const CFG = window.APP_CONFIG || {};
+  const $ = (id) => document.getElementById(id);
 
-const state = {
-  token: "",
-  email: "",
-  role: "user",
-  selectedInnovationId: "",
-  selectedInnovationTitle: ""
-};
+  const state = {
+    token: localStorage.getItem("ri_token") || "",
+    email: localStorage.getItem("ri_email") || "",
+    role: localStorage.getItem("ri_role") || "",
+    selectedInnovationId: localStorage.getItem("ri_selectedInnovationId") || "",
+    selectedInnovationTitle: localStorage.getItem("ri_selectedInnovationTitle") || "",
+    staffCache: new Map(), // email -> {email,name,jawatan}
+  };
 
-function saveLocal(){
-  localStorage.setItem("ri_state", JSON.stringify({
-    token: state.token,
-    email: state.email,
-    role: state.role,
-    selectedInnovationId: state.selectedInnovationId,
-    selectedInnovationTitle: state.selectedInnovationTitle
-  }));
-}
+  const ui = {
+    loginCard: $("loginCard"),
+    loginMsg: $("loginMsg"),
+    app: $("app"),
+    userBox: $("userBox"),
+    userEmail: $("userEmail"),
+    userRole: $("userRole"),
+    btnLogout: $("btnLogout"),
+    selectedInnovationLabel: $("selectedInnovationLabel"),
+    topMsg: $("topMsg"),
+    yearNow: $("yearNow"),
 
-function loadLocal(){
-  try{
-    const raw = localStorage.getItem("ri_state");
-    if(!raw) return;
-    const s = JSON.parse(raw);
-    state.token = s.token || "";
-    state.email = s.email || "";
-    state.role = s.role || "user";
-    state.selectedInnovationId = s.selectedInnovationId || "";
-    state.selectedInnovationTitle = s.selectedInnovationTitle || "";
-  }catch(e){}
-}
+    // dashboard
+    dashYear: $("dashYear"),
+    dashYearSelect: $("dashYearSelect"),
+    btnDashRefresh: $("btnDashRefresh"),
+    statInnovations: $("statInnovations"),
+    statComps: $("statComps"),
+    statGold: $("statGold"),
+    statSilver: $("statSilver"),
+    statBronze: $("statBronze"),
+    statPenyertaan: $("statPenyertaan"),
+    statPeringkat: $("statPeringkat"),
 
-function clearLocal(){
-  localStorage.removeItem("ri_state");
-  state.token = "";
-  state.email = "";
-  state.role = "user";
-  state.selectedInnovationId = "";
-  state.selectedInnovationTitle = "";
-}
+    // pdf
+    btnPdfMine: $("btnPdfMine"),
+    btnPdfSingle: $("btnPdfSingle"),
+    btnPdfAll: $("btnPdfAll"),
 
-function showMsg(msg){
-  const box = $("globalMsg");
-  if(!msg){
-    box.classList.add("hidden");
-    box.textContent = "";
-    return;
+    // inovasi
+    inovasiList: $("inovasiList"),
+    invId: $("invId"),
+    invTajuk: $("invTajuk"),
+    invTahun: $("invTahun"),
+    invKategori: $("invKategori"),
+    invStatus: $("invStatus"),
+    invMyipoStatus: $("invMyipoStatus"),
+    invMyipoNumber: $("invMyipoNumber"),
+    btnSaveInv: $("btnSaveInv"),
+    btnClearInv: $("btnClearInv"),
+    invMsg: $("invMsg"),
+
+    // team
+    teamList: $("teamList"),
+    btnTeamRefresh: $("btnTeamRefresh"),
+    teamSearch: $("teamSearch"),
+    staffDatalist: $("staffDatalist"),
+    teamEmail: $("teamEmail"),
+    teamName: $("teamName"),
+    teamRole: $("teamRole"),
+    btnAddTeam: $("btnAddTeam"),
+    teamMsg: $("teamMsg"),
+
+    // comps
+    compList: $("compList"),
+    btnCompRefresh: $("btnCompRefresh"),
+    compEvent: $("compEvent"),
+    compYear: $("compYear"),
+    compPeringkat: $("compPeringkat"),
+    compPingat: $("compPingat"),
+    compAnugerah: $("compAnugerah"),
+    compAnugerahName: $("compAnugerahName"),
+    btnAddComp: $("btnAddComp"),
+    compMsg: $("compMsg"),
+
+    // profil
+    profEmail: $("profEmail"),
+    profRole: $("profRole"),
+  };
+
+  // ---------------------------
+  // API helpers
+  // ---------------------------
+  function apiUrl(action, params = {}) {
+    const url = new URL(CFG.API_BASE);
+    url.searchParams.set("action", action);
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && String(v).length) url.searchParams.set(k, String(v));
+    }
+    return url.toString();
   }
-  box.classList.remove("hidden");
-  box.textContent = msg;
-}
 
-function setSelectedInnovation(id, title){
-  state.selectedInnovationId = id || "";
-  state.selectedInnovationTitle = title || "";
-  $("selectedInnovationTitle").textContent = state.selectedInnovationTitle || "-";
-  saveLocal();
-}
-
-function requireInnovation(){
-  if(!state.selectedInnovationId){
-    showMsg("Pilih inovasi dulu kat tab Inovasi.");
-    return false;
-  }
-  showMsg("");
-  return true;
-}
-
-async function api(action, body = null){
-  const base = CFG.API_BASE;
-  if(!base) throw new Error("API_BASE belum set dalam config.js");
-
-  const url = new URL(base);
-  url.searchParams.set("action", action);
-  if(state.token) url.searchParams.set("token", state.token);
-  if(body && typeof body === "object"){
-    url.searchParams.set("payload", JSON.stringify(body));
+  async function apiGet(action, params = {}) {
+    const res = await fetch(apiUrl(action, params), { method: "GET" });
+    return res.json();
   }
 
-  const res = await fetch(url.toString(), { method: "GET" });
-  const txt = await res.text();
-  let data = {};
-  try { data = JSON.parse(txt); }
-  catch(e) { data = { ok:false, error:"Invalid JSON: "+txt.slice(0,120) }; }
-  return data;
-}
-
-function initGoogleButton(){
-  const clientId = CFG.GOOGLE_CLIENT_ID;
-  if (!clientId) {
-    $("loginMsg").textContent = "GOOGLE_CLIENT_ID belum set dalam config.js";
-    return;
+  async function apiPost(action, params = {}, body = {}) {
+    const url = apiUrl(action, params);
+    // NOTE: text/plain to avoid preflight in many cases
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(body || {})
+    });
+    return res.json();
   }
 
-  const mount = () => {
-    if (!window.google || !google.accounts || !google.accounts.id) {
-      $("loginMsg").textContent = "Loading login Google...";
-      setTimeout(mount, 250);
+  function setMsg(el, msg, ok = true) {
+    if (!el) return;
+    el.className = "text-sm " + (ok ? "text-emerald-700" : "text-rose-700");
+    el.textContent = msg || "";
+  }
+
+  function requireInnovation() {
+    if (!state.selectedInnovationId) {
+      setMsg(ui.topMsg, "Pilih inovasi dulu kat tab Inovasi.", false);
+      return false;
+    }
+    setMsg(ui.topMsg, "");
+    return true;
+  }
+
+  // ---------------------------
+  // Auth / Google Sign-In
+  // ---------------------------
+  function setupGoogleButton() {
+    // Render via g_id_onload + g_id_signin
+    const onload = $("g_id_onload");
+    const signin = $("g_id_signin");
+    if (!onload || !signin) return;
+
+    onload.setAttribute("data-client_id", CFG.GOOGLE_CLIENT_ID);
+    onload.setAttribute("data-callback", "onGoogleCredential");
+    onload.setAttribute("data-auto_prompt", "false");
+    onload.setAttribute("data-hosted_domain", CFG.ALLOWED_DOMAIN || "");
+
+    signin.setAttribute("data-type", "standard");
+    signin.setAttribute("data-theme", "outline");
+    signin.setAttribute("data-size", "large");
+    signin.setAttribute("data-text", "signin_with");
+    signin.setAttribute("data-shape", "pill");
+  }
+
+  // global callback for GIS
+  window.onGoogleCredential = async (resp) => {
+    try {
+      setMsg(ui.loginMsg, "Signing in...");
+      const credential = resp && resp.credential ? resp.credential : "";
+      const out = await apiGet("loginGoogle", { credential });
+      if (!out.ok) {
+        setMsg(ui.loginMsg, out.error || "Login failed", false);
+        return;
+      }
+      state.token = out.token;
+      state.email = out.email;
+      state.role = out.role || "user";
+
+      localStorage.setItem("ri_token", state.token);
+      localStorage.setItem("ri_email", state.email);
+      localStorage.setItem("ri_role", state.role);
+
+      await bootApp();
+    } catch (e) {
+      setMsg(ui.loginMsg, String(e), false);
+    }
+  };
+
+  async function logout() {
+    localStorage.removeItem("ri_token");
+    localStorage.removeItem("ri_email");
+    localStorage.removeItem("ri_role");
+    localStorage.removeItem("ri_selectedInnovationId");
+    localStorage.removeItem("ri_selectedInnovationTitle");
+    state.token = ""; state.email = ""; state.role = "";
+    state.selectedInnovationId = ""; state.selectedInnovationTitle = "";
+    location.reload();
+  }
+
+  // ---------------------------
+  // UI Tabs
+  // ---------------------------
+  function setTab(tab) {
+    document.querySelectorAll(".panel").forEach(p => p.classList.add("hidden"));
+    document.querySelectorAll(".tab").forEach(b => b.classList.remove("bg-slate-900", "text-white"));
+    const panel = $("panel-" + tab);
+    if (panel) panel.classList.remove("hidden");
+    const btn = document.querySelector(`.tab[data-tab="${tab}"]`);
+    if (btn) btn.classList.add("bg-slate-900", "text-white");
+  }
+
+  // ---------------------------
+  // Dashboard
+  // ---------------------------
+  function initYearSelect() {
+    const now = new Date().getFullYear();
+    ui.dashYearSelect.innerHTML = "";
+    for (let y = now - 2; y <= now + 1; y++) {
+      const opt = document.createElement("option");
+      opt.value = String(y);
+      opt.textContent = String(y);
+      if (y === now) opt.selected = true;
+      ui.dashYearSelect.appendChild(opt);
+    }
+    ui.dashYear.textContent = String(now);
+  }
+
+  async function loadDashboard() {
+    const year = ui.dashYearSelect.value;
+    ui.dashYear.textContent = year;
+
+    const out = await apiGet("dashboardStats", { token: state.token, year });
+    if (!out.ok) {
+      setMsg(ui.topMsg, out.error || "Dashboard error", false);
+      return;
+    }
+    const s = out.stats || {};
+    ui.statInnovations.textContent = String(s.totalInnovations || 0);
+    ui.statComps.textContent = String(s.totalCompetitions || 0);
+
+    const m = s.medalCounts || {};
+    ui.statGold.textContent = String(m.GOLD || 0);
+    ui.statSilver.textContent = String(m.SILVER || 0);
+    ui.statBronze.textContent = String(m.BRONZE || 0);
+    ui.statPenyertaan.textContent = String(m.PENYERTAAN || 0);
+
+    ui.statPeringkat.innerHTML = "";
+    const pc = s.peringkatCounts || {};
+    const keys = Object.keys(pc).sort((a,b)=> (pc[b]-pc[a]));
+    if (!keys.length) {
+      ui.statPeringkat.innerHTML = `<span class="text-sm text-slate-500">Belum ada rekod pertandingan untuk tahun ini.</span>`;
+      return;
+    }
+    keys.forEach(k => {
+      const pill = document.createElement("div");
+      pill.className = "px-3 py-1 rounded-full border bg-slate-50 text-sm";
+      pill.innerHTML = `<b>${k}</b>: ${pc[k]}`;
+      ui.statPeringkat.appendChild(pill);
+    });
+  }
+
+  // ---------------------------
+  // Innovations
+  // ---------------------------
+  function clearInvForm() {
+    ui.invId.value = "";
+    ui.invTajuk.value = "";
+    ui.invTahun.value = "";
+    ui.invKategori.value = "";
+    ui.invStatus.value = "";
+    ui.invMyipoStatus.value = "no";
+    ui.invMyipoNumber.value = "";
+    ui.invMyipoNumber.disabled = true;
+    setMsg(ui.invMsg, "");
+  }
+
+  function bindMyipoToggle() {
+    ui.invMyipoStatus.addEventListener("change", () => {
+      const yes = ui.invMyipoStatus.value === "yes";
+      ui.invMyipoNumber.disabled = !yes;
+      if (!yes) ui.invMyipoNumber.value = "";
+    });
+    ui.invMyipoNumber.disabled = true;
+  }
+
+  async function loadInnovations() {
+    const out = await apiGet("listMyInnovations", { token: state.token });
+    if (!out.ok) {
+      setMsg(ui.invMsg, out.error || "Gagal load inovasi", false);
       return;
     }
 
-    $("loginMsg").textContent = "";
-    $("googleBtn").innerHTML = "";
+    const items = out.items || [];
+    ui.inovasiList.innerHTML = "";
 
-    google.accounts.id.initialize({
-      client_id: clientId,
-      callback: async (resp) => {
-        try{
-          $("loginMsg").textContent = "Sedang login...";
-          const credential = resp && resp.credential ? resp.credential : "";
-          if (!credential) throw new Error("No credential from Google");
-
-          const out = await api("loginGoogle", { credential });
-          if (!out.ok) throw new Error(out.error || "Login gagal");
-
-          state.token = out.token;
-          state.email = out.email;
-          state.role = out.role || "user";
-          saveLocal();
-
-          await bootAfterLogin();
-        }catch(err){
-          $("loginMsg").textContent = "Login gagal: " + (err.message || err);
-        }
-      }
-    });
-
-    google.accounts.id.renderButton(
-      $("googleBtn"),
-      { theme:"outline", size:"large", shape:"pill", width: 340 }
-    );
-  };
-
-  mount();
-}
-
-function activateTab(tabId){
-  document.querySelectorAll(".tabPane").forEach(el => el.classList.add("hidden"));
-  $(tabId).classList.remove("hidden");
-
-  document.querySelectorAll(".tabBtn").forEach(btn=>{
-    const active = btn.dataset.tab === tabId;
-    btn.classList.toggle("bg-slate-900", active);
-    btn.classList.toggle("text-white", active);
-    btn.classList.toggle("border-slate-900", active);
-  });
-
-  if(tabId === "tabTeam") renderTeam();
-  if(tabId === "tabPertandingan") renderCompetitions();
-  if(tabId === "tabInovasi") renderInnovations();
-  if(tabId === "tabProfil") renderProfil();
-}
-
-function renderProfil(){
-  $("profilEmail").textContent = state.email || "-";
-  $("profilRole").textContent = state.role || "-";
-}
-
-/** ===== EDIT MODAL ===== */
-function openEditModal(inv){
-  $("editId").value = inv.id || "";
-  $("editTajuk").value = inv.tajuk || "";
-  $("editTahun").value = inv.tahun || "";
-  $("editKategori").value = inv.kategori || "";
-  $("editStatus").value = inv.status || "";
-  $("editMyipoStatus").value = (inv.myipoStatus || "").toLowerCase();
-  $("editMyipoNumber").value = inv.myipoNumber || "";
-  $("editModal").classList.remove("hidden");
-  $("editModal").classList.add("flex");
-}
-
-function closeEditModal(){
-  $("editModal").classList.add("hidden");
-  $("editModal").classList.remove("flex");
-}
-
-$("btnCloseEdit")?.addEventListener("click", closeEditModal);
-$("editModal")?.addEventListener("click", (e)=>{
-  if(e.target && e.target.id === "editModal") closeEditModal();
-});
-
-$("btnSaveEdit")?.addEventListener("click", async ()=>{
-  try{
-    const id = $("editId").value.trim();
-    if(!id) throw new Error("Missing innovation id");
-
-    const payload = {
-      id,
-      tajuk: $("editTajuk").value.trim(),
-      tahun: $("editTahun").value.trim(),
-      kategori: $("editKategori").value.trim(),
-      status: $("editStatus").value.trim(),
-      myipoStatus: $("editMyipoStatus").value.trim(),
-      myipoNumber: $("editMyipoNumber").value.trim()
-    };
-
-    if(!payload.tajuk) throw new Error("Tajuk diperlukan");
-    if(!payload.tahun) throw new Error("Tahun diperlukan");
-
-    const out = await api("updateInnovation", payload);
-    if(!out.ok) throw new Error(out.error || "Gagal update inovasi");
-
-    // kalau inovasi yang sedang dipilih, update title kat header
-    if(state.selectedInnovationId === id){
-      setSelectedInnovation(id, payload.tajuk);
+    if (!items.length) {
+      ui.inovasiList.innerHTML = `<div class="text-sm text-slate-500">Belum ada inovasi. Tambah kat sebelah kanan.</div>`;
     }
 
-    closeEditModal();
-    await renderInnovations();
-  }catch(e){
-    showMsg(e.message || String(e));
-  }
-});
+    items.forEach(inv => {
+      const id = inv.innovationId || inv.id;
+      const selected = (id === state.selectedInnovationId);
 
-$("btnDeleteInv")?.addEventListener("click", async ()=>{
-  try{
-    const id = $("editId").value.trim();
-    if(!id) throw new Error("Missing innovation id");
-
-    const ok = confirm("Confirm delete inovasi ini? (Team & Pertandingan bawahnya akan ikut padam)");
-    if(!ok) return;
-
-    const out = await api("deleteInnovation", { id });
-    if(!out.ok) throw new Error(out.error || "Gagal delete inovasi");
-
-    // kalau delete inovasi yang sedang dipilih, reset selection
-    if(state.selectedInnovationId === id){
-      setSelectedInnovation("", "");
-    }
-
-    closeEditModal();
-    await renderInnovations();
-  }catch(e){
-    showMsg(e.message || String(e));
-  }
-});
-
-/** ===== INOVASI LIST ===== */
-async function renderInnovations(){
-  const out = await api("listMyInnovations");
-  if(!out.ok) { showMsg(out.error || "Gagal load inovasi"); return; }
-
-  const list = $("inovasiList");
-  list.innerHTML = "";
-
-  const items = out.items || [];
-  if(items.length === 0){
-    list.innerHTML = `<div class="text-sm text-slate-500">Belum ada inovasi. Tambah kat sebelah kanan.</div>`;
-    return;
-  }
-
-  items.forEach(it=>{
-    const active = it.id === state.selectedInnovationId;
-
-    const wrap = document.createElement("div");
-    wrap.className = `rounded-2xl border px-4 py-3 ${active ? "border-emerald-300 bg-emerald-50" : "border-slate-100 bg-white"}`;
-
-    wrap.innerHTML = `
-      <div class="flex items-start justify-between gap-3">
-        <button class="text-left flex-1 hover:opacity-90">
-          <div class="font-semibold">${escapeHtml(it.tajuk || "(tiada tajuk)")}</div>
-          <div class="text-xs text-slate-500 mt-1">
-            Tahun: ${escapeHtml(it.tahun||"-")} • Kategori: ${escapeHtml(it.kategori||"-")} • Status: ${escapeHtml(it.status||"-")}
+      const card = document.createElement("div");
+      card.className = `p-4 rounded-xl border cursor-pointer hover:bg-slate-50 ${selected ? "bg-emerald-50 border-emerald-300" : "bg-white"}`;
+      card.innerHTML = `
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="font-semibold">${escapeHtml(inv.tajuk || "Tanpa Tajuk")}</div>
+            <div class="text-sm text-slate-500">Tahun: ${escapeHtml(inv.tahun||"-")} · Kategori: ${escapeHtml(inv.kategori||"-")} · Status: ${escapeHtml(inv.status||"-")}</div>
+            <div class="text-xs text-slate-400 mt-1">MYIPO: ${escapeHtml(inv.myipoStatus||"no")} ${inv.myipoStatus==="yes" ? "(" + escapeHtml(inv.myipoNumber||"-") + ")" : ""}</div>
           </div>
-          <div class="text-xs text-slate-500 mt-1">
-            MYIPO: ${escapeHtml((it.myipoStatus||"-").toString())} ${it.myipoNumber ? "• "+escapeHtml(it.myipoNumber) : ""}
+          <div class="flex flex-col gap-2">
+            <button class="btnSelect px-3 py-2 rounded-lg border bg-white text-sm hover:bg-slate-50">Select</button>
+            <button class="btnEdit px-3 py-2 rounded-lg border bg-white text-sm hover:bg-slate-50">Edit</button>
           </div>
-        </button>
-
-        <button class="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
-          Edit
-        </button>
-      </div>
-    `;
-
-    // click select
-    wrap.querySelector("button.text-left").onclick = () => {
-      setSelectedInnovation(it.id, it.tajuk || "-");
-      showMsg("");
-      renderInnovations();
-    };
-
-    // click edit
-    wrap.querySelectorAll("button")[1].onclick = () => openEditModal(it);
-
-    list.appendChild(wrap);
-  });
-}
-
-async function renderTeam(){
-  if(!requireInnovation()) return;
-
-  const out = await api("listTeam", { innovationId: state.selectedInnovationId });
-  if(!out.ok) { showMsg(out.error || "Gagal load team"); return; }
-
-  const list = $("teamList");
-  list.innerHTML = "";
-
-  const items = out.items || [];
-  if(items.length === 0){
-    list.innerHTML = `<div class="text-sm text-slate-500">Belum ada ahli team.</div>`;
-    return;
-  }
-
-  items.forEach(m=>{
-    const div = document.createElement("div");
-    div.className = "rounded-2xl border border-slate-100 bg-white px-4 py-3 flex items-start justify-between gap-3";
-    div.innerHTML = `
-      <div>
-        <div class="font-semibold">${escapeHtml(m.nama || "-")}</div>
-        <div class="text-sm text-slate-600">${escapeHtml(m.email || "-")}</div>
-        <div class="text-xs text-slate-500 mt-1">Peranan: ${escapeHtml(m.peranan || "member")}</div>
-      </div>
-      <button class="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-50">Buang</button>
-    `;
-    div.querySelector("button").onclick = async () => {
-      const ok = confirm("Buang ahli ini?");
-      if(!ok) return;
-      const del = await api("deleteTeam", { id: m.id, innovationId: state.selectedInnovationId });
-      if(!del.ok) { showMsg(del.error || "Gagal buang"); return; }
-      renderTeam();
-    };
-    list.appendChild(div);
-  });
-}
-
-async function renderCompetitions(){
-  if(!requireInnovation()) return;
-
-  const out = await api("listCompetitions", { innovationId: state.selectedInnovationId });
-  if(!out.ok) { showMsg(out.error || "Gagal load pertandingan"); return; }
-
-  const list = $("compList");
-  list.innerHTML = "";
-
-  const items = out.items || [];
-  if(items.length === 0){
-    list.innerHTML = `<div class="text-sm text-slate-500">Belum ada rekod pertandingan.</div>`;
-    return;
-  }
-
-  items.forEach(c=>{
-    const badge = c.pingat ? `<span class="text-xs rounded-full px-2 py-1 border border-slate-200">${escapeHtml(c.pingat)}</span>` : "";
-    const special = (c.anugerahKhas === "yes" || c.anugerahKhas === true) ? ` • <span class="text-xs text-emerald-700">Anugerah khas: ${escapeHtml(c.namaAnugerahKhas||"-")}</span>` : "";
-
-    const div = document.createElement("div");
-    div.className = "rounded-2xl border border-slate-100 bg-white px-4 py-3 flex items-start justify-between gap-3";
-    div.innerHTML = `
-      <div>
-        <div class="font-semibold">${escapeHtml(c.namaEvent || "-")}</div>
-        <div class="text-xs text-slate-500 mt-1">
-          ${escapeHtml(c.tahun || "-")} • ${escapeHtml(c.peringkat || "-")} ${badge} ${special}
         </div>
-      </div>
-      <button class="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-50">Buang</button>
-    `;
-    div.querySelector("button").onclick = async () => {
-      const ok = confirm("Buang rekod pertandingan ini?");
-      if(!ok) return;
-      const del = await api("deleteCompetition", { id: c.id || c.compId || "" });
-      if(!del.ok) { showMsg(del.error || "Gagal buang"); return; }
-      renderCompetitions();
+      `;
+
+      card.querySelector(".btnSelect").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        selectInnovation(id, inv.tajuk || "");
+      });
+      card.addEventListener("click", () => selectInnovation(id, inv.tajuk || ""));
+
+      card.querySelector(".btnEdit").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        ui.invId.value = id;
+        ui.invTajuk.value = inv.tajuk || "";
+        ui.invTahun.value = inv.tahun || "";
+        ui.invKategori.value = inv.kategori || "";
+        ui.invStatus.value = inv.status || "";
+        ui.invMyipoStatus.value = (inv.myipoStatus === "yes" ? "yes" : "no");
+        ui.invMyipoNumber.disabled = (ui.invMyipoStatus.value !== "yes");
+        ui.invMyipoNumber.value = inv.myipoNumber || "";
+        setMsg(ui.invMsg, "Mode edit: bila siap, tekan Simpan.");
+      });
+
+      ui.inovasiList.appendChild(card);
+    });
+
+    // refresh label
+    ui.selectedInnovationLabel.textContent = state.selectedInnovationTitle || "-";
+  }
+
+  function selectInnovation(id, title) {
+    state.selectedInnovationId = id;
+    state.selectedInnovationTitle = title;
+
+    localStorage.setItem("ri_selectedInnovationId", id);
+    localStorage.setItem("ri_selectedInnovationTitle", title);
+
+    ui.selectedInnovationLabel.textContent = title || "-";
+    setMsg(ui.topMsg, "");
+
+    // auto refresh team & comps bila tukar inovasi
+    loadTeam().catch(()=>{});
+    loadCompetitions().catch(()=>{});
+  }
+
+  async function saveInnovation() {
+    const id = ui.invId.value.trim();
+    const p = {
+      tajuk: ui.invTajuk.value.trim(),
+      tahun: ui.invTahun.value.trim(),
+      kategori: ui.invKategori.value.trim(),
+      status: ui.invStatus.value.trim(),
+      myipoStatus: ui.invMyipoStatus.value,
+      myipoNumber: ui.invMyipoNumber.value.trim()
     };
-    list.appendChild(div);
-  });
-}
 
-/** Staff search suggestions + autofill */
-let staffTimer = null;
-$("staffSearch")?.addEventListener("input", () => {
-  clearTimeout(staffTimer);
-  staffTimer = setTimeout(loadStaffSuggest, 250);
-});
+    if (!p.tajuk) return setMsg(ui.invMsg, "Tajuk diperlukan.", false);
+    if (!p.tahun) return setMsg(ui.invMsg, "Tahun diperlukan.", false);
 
-async function loadStaffSuggest(){
-  const q = ($("staffSearch").value || "").trim();
-  if(q.length < 2) return;
-
-  const out = await api("searchStaff", { q });
-  if(!out.ok) return;
-
-  const dl = $("staffSuggest");
-  dl.innerHTML = "";
-
-  (out.items || []).forEach(it=>{
-    const opt = document.createElement("option");
-    opt.value = it.email || "";
-    opt.label = it.name ? `${it.name}` : "";
-    dl.appendChild(opt);
-  });
-}
-
-$("staffSearch")?.addEventListener("change", async () => {
-  const val = ($("staffSearch").value || "").trim().toLowerCase();
-  if(!val) return;
-
-  const out = await api("lookupStaff", { email: val });
-  if(out.ok && out.found){
-    $("memberEmail").value = out.email || val;
-    $("memberName").value = out.name || "";
-  }else{
-    $("memberEmail").value = val;
-    if(!$("memberName").value) $("memberName").value = "";
-  }
-});
-
-/** Form handlers */
-$("btnAddInovasi")?.addEventListener("click", async () => {
-  try{
-    const tajuk = $("invTajuk").value.trim();
-    const tahun = $("invTahun").value.trim();
-    const kategori = $("invKategori").value.trim();
-    const status = $("invStatus").value.trim();
-    const myipoStatus = $("invMyipoStatus").value.trim(); // select
-    const myipoNumber = $("invMyipoNumber").value.trim();
-
-    const out = await api("addInnovation", { tajuk, tahun, kategori, status, myipoStatus, myipoNumber });
-    if(!out.ok) throw new Error(out.error || "Gagal simpan inovasi");
-
-    $("invTajuk").value = "";
-    $("invTahun").value = "";
-    $("invKategori").value = "";
-    $("invStatus").value = "";
-    $("invMyipoStatus").value = "";
-    $("invMyipoNumber").value = "";
-
-    await renderInnovations();
-  }catch(e){
-    showMsg(e.message || String(e));
-  }
-});
-
-$("btnAddMember")?.addEventListener("click", async () => {
-  try{
-    if(!requireInnovation()) return;
-
-    const email = $("memberEmail").value.trim().toLowerCase();
-    const nama  = $("memberName").value.trim();
-    const peranan = $("memberRole").value.trim() || "member";
-
-    if(!email) throw new Error("Email diperlukan");
-    if(!nama) throw new Error("Nama diperlukan");
-
-    const out = await api("addTeam", {
-      innovationId: state.selectedInnovationId,
-      email,
-      nama,
-      peranan
-    });
-
-    if(!out.ok) throw new Error(out.error || "Gagal tambah ahli");
-
-    $("staffSearch").value = "";
-    $("memberEmail").value = "";
-    $("memberName").value = "";
-    $("memberRole").value = "";
-
-    renderTeam();
-  }catch(e){
-    showMsg(e.message || String(e));
-  }
-});
-
-$("compHasSpecial")?.addEventListener("change", () => {
-  const on = $("compHasSpecial").checked;
-  $("compSpecialName").classList.toggle("hidden", !on);
-  if(!on) $("compSpecialName").value = "";
-});
-
-$("btnAddComp")?.addEventListener("click", async () => {
-  try{
-    if(!requireInnovation()) return;
-
-    const namaEvent = $("compNamaEvent").value.trim();
-    const tahun = $("compTahun").value.trim();
-    const peringkat = $("compPeringkat").value.trim();
-    const pingat = $("compPingat").value.trim();
-    const anugerahKhas = $("compHasSpecial").checked ? "yes" : "no";
-    const namaAnugerahKhas = $("compHasSpecial").checked ? $("compSpecialName").value.trim() : "";
-
-    if(!namaEvent) throw new Error("Nama event diperlukan");
-    if(!tahun) throw new Error("Tahun diperlukan");
-    if(!peringkat) throw new Error("Peringkat diperlukan");
-    if(!pingat) throw new Error("Pingat diperlukan");
-    if(anugerahKhas === "yes" && !namaAnugerahKhas){
-      throw new Error("Nama anugerah khas diperlukan");
+    if (p.myipoStatus === "yes" && !p.myipoNumber) {
+      return setMsg(ui.invMsg, "MYIPO status = yes, jadi MYIPO no. wajib isi.", false);
     }
 
-    const out = await api("addCompetition", {
-      innovationId: state.selectedInnovationId,
-      namaEvent,
-      tahun,
-      peringkat,
-      pingat,
-      anugerahKhas,
-      namaAnugerahKhas
+    let out;
+    if (id) {
+      out = await apiPost("updateInnovation", { token: state.token }, { innovationId: id, ...p });
+    } else {
+      out = await apiPost("addInnovation", { token: state.token }, p);
+    }
+
+    if (!out.ok) return setMsg(ui.invMsg, out.error || "Gagal simpan", false);
+
+    setMsg(ui.invMsg, "Berjaya simpan.");
+    clearInvForm();
+    await loadInnovations();
+    await loadDashboard();
+  }
+
+  // ---------------------------
+  // Team
+  // ---------------------------
+  async function loadTeam() {
+    if (!requireInnovation()) return;
+
+    const out = await apiGet("listTeam", { token: state.token, innovationId: state.selectedInnovationId });
+    if (!out.ok) {
+      setMsg(ui.teamMsg, out.error || "Gagal load team", false);
+      return;
+    }
+
+    const items = out.items || [];
+    ui.teamList.innerHTML = "";
+
+    if (!items.length) {
+      ui.teamList.innerHTML = `<div class="text-sm text-slate-500">Belum ada ahli.</div>`;
+      return;
+    }
+
+    items.forEach(m => {
+      const card = document.createElement("div");
+      card.className = "p-4 rounded-xl border bg-white flex items-start justify-between gap-3";
+      card.innerHTML = `
+        <div>
+          <div class="font-semibold">${escapeHtml(m.nama||"-")}</div>
+          <div class="text-sm text-slate-500">${escapeHtml(m.email||"-")}</div>
+          <div class="text-xs text-slate-400 mt-1">Peranan: ${escapeHtml(m.peranan||"-")}</div>
+        </div>
+        <button class="btnDel px-3 py-2 rounded-lg border bg-white hover:bg-slate-50 text-sm">Buang</button>
+      `;
+      card.querySelector(".btnDel").addEventListener("click", async () => {
+        const ok = confirm("Buang ahli ini?");
+        if (!ok) return;
+        const del = await apiPost("deleteTeam", { token: state.token }, { teamId: m.teamId, innovationId: state.selectedInnovationId });
+        if (!del.ok) return setMsg(ui.teamMsg, del.error || "Gagal buang", false);
+        setMsg(ui.teamMsg, "Ahli dibuang.");
+        await loadTeam();
+      });
+      ui.teamList.appendChild(card);
     });
-
-    if(!out.ok) throw new Error(out.error || "Gagal simpan pertandingan");
-
-    $("compNamaEvent").value = "";
-    $("compTahun").value = "";
-    $("compPeringkat").value = "";
-    $("compPingat").value = "";
-    $("compHasSpecial").checked = false;
-    $("compSpecialName").value = "";
-    $("compSpecialName").classList.add("hidden");
-
-    renderCompetitions();
-  }catch(e){
-    showMsg(e.message || String(e));
   }
-});
 
-async function bootAfterLogin(){
-  $("loginView").classList.add("hidden");
-  $("appView").classList.remove("hidden");
-
-  $("userBox").classList.remove("hidden");
-  $("userEmail").textContent = state.email || "";
-  $("userRole").textContent = state.role || "user";
-
-  $("profilEmail").textContent = state.email || "-";
-  $("profilRole").textContent = state.role || "-";
-
-  $("selectedInnovationTitle").textContent = state.selectedInnovationTitle || "-";
-
-  activateTab("tabInovasi");
-}
-
-$("btnLogout")?.addEventListener("click", () => {
-  clearLocal();
-  location.reload();
-});
-
-$("btnRefresh")?.addEventListener("click", async () => {
-  showMsg("");
-  await renderInnovations();
-  if(state.selectedInnovationId){
-    await renderTeam();
-    await renderCompetitions();
+  async function staffSuggest(q) {
+    const out = await apiGet("searchStaff", { token: state.token, q });
+    if (!out.ok) return [];
+    return out.items || [];
   }
-});
 
-document.querySelectorAll(".tabBtn").forEach(btn=>{
-  btn.addEventListener("click", ()=> activateTab(btn.dataset.tab));
-});
+  function renderStaffDatalist(items) {
+    ui.staffDatalist.innerHTML = "";
+    items.forEach(it => {
+      const opt = document.createElement("option");
+      // pattern: "Nama <email>"
+      opt.value = `${it.name} <${it.email}>`;
+      ui.staffDatalist.appendChild(opt);
+      // cache
+      state.staffCache.set(String(it.email||"").toLowerCase(), it);
+    });
+  }
 
-function escapeHtml(s){
-  return String(s ?? "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
+  function parseEmailFromPick(text) {
+    const m = String(text||"").match(/<([^>]+)>/);
+    if (m && m[1]) return m[1].trim().toLowerCase();
+    // fallback: if user types email directly
+    if (String(text||"").includes("@")) return String(text||"").trim().toLowerCase();
+    return "";
+  }
 
-(async function init(){
-  loadLocal();
+  async function onTeamPick() {
+    const pick = ui.teamSearch.value;
+    const email = parseEmailFromPick(pick);
+    if (!email) return;
 
-  if(state.token){
-    try{
-      const me = await api("me");
-      if(me.ok){
-        state.email = me.email || state.email;
-        state.role = me.role || state.role;
-        saveLocal();
-        await bootAfterLogin();
-        return;
-      }
-    }catch(e){
-      clearLocal();
+    ui.teamEmail.value = email;
+
+    // try cache first
+    const cached = state.staffCache.get(email);
+    if (cached && cached.name) {
+      ui.teamName.value = cached.name;
+      setMsg(ui.teamMsg, "Nama auto diisi dari StaffDirectory.");
+      return;
+    }
+
+    // lookup backend (kalau ada)
+    const out = await apiGet("lookupStaff", { token: state.token, email });
+    if (out.ok && out.found) {
+      ui.teamName.value = out.name || "";
+      setMsg(ui.teamMsg, "Nama auto diisi dari StaffDirectory.");
+    } else {
+      // luar whitelist: biar user isi sendiri
+      ui.teamName.value = ui.teamName.value || "";
+      setMsg(ui.teamMsg, "Staf luar whitelist. Isi nama manual.", false);
     }
   }
 
-  $("loginView").classList.remove("hidden");
-  $("appView").classList.add("hidden");
-  $("userBox").classList.add("hidden");
+  async function addTeamMember() {
+    if (!requireInnovation()) return;
 
-  initGoogleButton();
+    const email = ui.teamEmail.value.trim().toLowerCase();
+    const nama = ui.teamName.value.trim();
+    const peranan = ui.teamRole.value.trim();
+
+    if (!email) return setMsg(ui.teamMsg, "Email diperlukan.", false);
+    if (!nama) return setMsg(ui.teamMsg, "Nama diperlukan (auto atau manual).", false);
+
+    const out = await apiPost("addTeam", { token: state.token }, {
+      innovationId: state.selectedInnovationId,
+      memberEmail: email,
+      memberName: nama,
+      roleInTeam: peranan
+    });
+
+    if (!out.ok) return setMsg(ui.teamMsg, out.error || "Gagal tambah ahli", false);
+
+    setMsg(ui.teamMsg, out.inWhitelist ? "Ahli ditambah (whitelist)." : "Ahli ditambah (manual / luar whitelist).");
+    ui.teamSearch.value = "";
+    ui.teamEmail.value = "";
+    ui.teamName.value = "";
+    ui.teamRole.value = "";
+    await loadTeam();
+  }
+
+  // ---------------------------
+  // Competitions
+  // ---------------------------
+  async function loadCompetitions() {
+    if (!requireInnovation()) return;
+
+    const out = await apiGet("listCompetitions", { token: state.token, innovationId: state.selectedInnovationId });
+    if (!out.ok) {
+      setMsg(ui.compMsg, out.error || "Gagal load pertandingan", false);
+      return;
+    }
+
+    const items = out.items || [];
+    ui.compList.innerHTML = "";
+
+    if (!items.length) {
+      ui.compList.innerHTML = `<div class="text-sm text-slate-500">Belum ada rekod pertandingan.</div>`;
+      return;
+    }
+
+    items.forEach(c => {
+      const card = document.createElement("div");
+      card.className = "p-4 rounded-xl border bg-white flex items-start justify-between gap-3";
+      card.innerHTML = `
+        <div>
+          <div class="font-semibold">${escapeHtml(c.namaEvent || "-")}</div>
+          <div class="text-sm text-slate-500">${escapeHtml(c.tahun||"-")} · ${escapeHtml(c.peringkat||"-")} · <b>${escapeHtml(c.pingat||"-")}</b></div>
+          <div class="text-xs text-slate-400 mt-1">Anugerah khas: ${c.anugerahKhas === "yes" ? "Ya" : "Tidak"} ${c.anugerahKhas==="yes" ? "· " + escapeHtml(c.namaAnugerahKhas||"") : ""}</div>
+        </div>
+        <button class="btnDel px-3 py-2 rounded-lg border bg-white hover:bg-slate-50 text-sm">Buang</button>
+      `;
+      card.querySelector(".btnDel").addEventListener("click", async () => {
+        const ok = confirm("Buang rekod pertandingan ini?");
+        if (!ok) return;
+        const del = await apiPost("deleteCompetition", { token: state.token }, { compId: c.compId, innovationId: state.selectedInnovationId });
+        if (!del.ok) return setMsg(ui.compMsg, del.error || "Gagal buang", false);
+        setMsg(ui.compMsg, "Rekod dibuang.");
+        await loadCompetitions();
+        await loadDashboard();
+      });
+      ui.compList.appendChild(card);
+    });
+  }
+
+  async function addCompetition() {
+    if (!requireInnovation()) return;
+
+    const p = {
+      innovationId: state.selectedInnovationId,
+      namaEvent: ui.compEvent.value.trim(),
+      tahun: ui.compYear.value.trim(),
+      peringkat: ui.compPeringkat.value.trim(),
+      pingat: ui.compPingat.value.trim(),
+      anugerahKhas: ui.compAnugerah.checked ? "yes" : "no",
+      namaAnugerahKhas: ui.compAnugerahName.value.trim()
+    };
+
+    if (!p.namaEvent) return setMsg(ui.compMsg, "Nama event diperlukan.", false);
+    if (!p.tahun) return setMsg(ui.compMsg, "Tahun diperlukan.", false);
+    if (!p.peringkat) return setMsg(ui.compMsg, "Peringkat diperlukan.", false);
+
+    if (p.anugerahKhas === "yes" && !p.namaAnugerahKhas) {
+      return setMsg(ui.compMsg, "Tick anugerah khas → isi nama anugerah.", false);
+    }
+
+    const out = await apiPost("addCompetition", { token: state.token }, p);
+    if (!out.ok) return setMsg(ui.compMsg, out.error || "Gagal simpan", false);
+
+    setMsg(ui.compMsg, "Berjaya simpan pertandingan.");
+    ui.compEvent.value = "";
+    ui.compYear.value = "";
+    ui.compPeringkat.value = "";
+    ui.compPingat.value = "PENYERTAAN";
+    ui.compAnugerah.checked = false;
+    ui.compAnugerahName.value = "";
+    ui.compAnugerahName.classList.add("hidden");
+
+    await loadCompetitions();
+    await loadDashboard();
+  }
+
+  // ---------------------------
+  // PDF
+  // ---------------------------
+  async function pdfMine() {
+    const out = await apiGet("generateReportPdfMine", { token: state.token });
+    if (!out.ok) return setMsg(ui.topMsg, out.error || "Gagal generate PDF", false);
+    window.open(out.pdfUrl, "_blank");
+    setMsg(ui.topMsg, "PDF siap dibuka di tab baru.");
+  }
+
+  async function pdfSingle() {
+    if (!requireInnovation()) return;
+    const out = await apiGet("generateReportPdf", { token: state.token, innovationId: state.selectedInnovationId });
+    if (!out.ok) return setMsg(ui.topMsg, out.error || "Gagal generate PDF", false);
+    window.open(out.pdfUrl, "_blank");
+    setMsg(ui.topMsg, "PDF inovasi dipilih siap dibuka di tab baru.");
+  }
+
+  async function pdfAll() {
+    const out = await apiGet("generateReportPdfAll", { token: state.token });
+    if (!out.ok) return setMsg(ui.topMsg, out.error || "Gagal generate PDF (admin)", false);
+    window.open(out.pdfUrl, "_blank");
+    setMsg(ui.topMsg, "PDF keseluruhan siap dibuka di tab baru.");
+  }
+
+  // ---------------------------
+  // Boot
+  // ---------------------------
+  async function bootApp() {
+    ui.loginCard.classList.add("hidden");
+    ui.app.classList.remove("hidden");
+    ui.userBox.classList.remove("hidden");
+
+    ui.userEmail.textContent = state.email;
+    ui.userRole.textContent = state.role;
+    ui.profEmail.textContent = state.email;
+    ui.profRole.textContent = state.role;
+
+    ui.selectedInnovationLabel.textContent = state.selectedInnovationTitle || "-";
+
+    if (state.role === "admin") ui.btnPdfAll.classList.remove("hidden");
+
+    await loadDashboard();
+    await loadInnovations();
+
+    if (state.selectedInnovationId) {
+      await loadTeam();
+      await loadCompetitions();
+    }
+
+    setTab("inovasi");
+  }
+
+  async function tryResume() {
+    if (!state.token) return;
+
+    const out = await apiGet("me", { token: state.token });
+    if (!out.ok) {
+      // token invalid, reset
+      localStorage.removeItem("ri_token");
+      return;
+    }
+    state.email = out.email;
+    state.role = out.role || "user";
+    localStorage.setItem("ri_email", state.email);
+    localStorage.setItem("ri_role", state.role);
+    await bootApp();
+  }
+
+  // ---------------------------
+  // Utils
+  // ---------------------------
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  // ---------------------------
+  // Events
+  // ---------------------------
+  function bindEvents() {
+    ui.btnLogout.addEventListener("click", logout);
+
+    document.querySelectorAll(".tab").forEach(btn => {
+      btn.addEventListener("click", () => setTab(btn.dataset.tab));
+    });
+
+    ui.btnSaveInv.addEventListener("click", saveInnovation);
+    ui.btnClearInv.addEventListener("click", clearInvForm);
+
+    ui.btnTeamRefresh.addEventListener("click", () => loadTeam());
+    ui.btnAddTeam.addEventListener("click", addTeamMember);
+
+    ui.teamSearch.addEventListener("input", async () => {
+      const q = ui.teamSearch.value.trim();
+      if (q.length < 2) return;
+      const items = await staffSuggest(q);
+      renderStaffDatalist(items);
+    });
+
+    ui.teamSearch.addEventListener("change", onTeamPick);
+
+    ui.btnCompRefresh.addEventListener("click", () => loadCompetitions());
+    ui.btnAddComp.addEventListener("click", addCompetition);
+
+    ui.compAnugerah.addEventListener("change", () => {
+      ui.compAnugerahName.classList.toggle("hidden", !ui.compAnugerah.checked);
+      if (!ui.compAnugerah.checked) ui.compAnugerahName.value = "";
+    });
+
+    ui.btnPdfMine.addEventListener("click", pdfMine);
+    ui.btnPdfSingle.addEventListener("click", pdfSingle);
+    ui.btnPdfAll.addEventListener("click", pdfAll);
+
+    ui.btnDashRefresh.addEventListener("click", loadDashboard);
+    ui.dashYearSelect.addEventListener("change", loadDashboard);
+  }
+
+  // ---------------------------
+  // init
+  // ---------------------------
+  function init() {
+    ui.yearNow.textContent = String(new Date().getFullYear());
+    initYearSelect();
+    setupGoogleButton();
+    bindMyipoToggle();
+    bindEvents();
+
+    clearInvForm();
+    tryResume().catch(() => {});
+  }
+
+  init();
 })();
