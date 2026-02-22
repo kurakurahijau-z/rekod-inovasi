@@ -1,270 +1,71 @@
 <!doctype html>
 <html lang="ms">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Rekod Inovasi Jabatan</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Rekod Inovasi Jabatan</title>
 
-  <!-- Google Identity Services -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 
-  <style>
-    * { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Helvetica Neue", sans-serif; }
-  </style>
+<style>
+body{
+  font-family: Arial, sans-serif;
+  background:#f3f4f6;
+  padding:40px;
+}
+.card{
+  background:#fff;
+  padding:24px;
+  max-width:420px;
+  margin:auto;
+  border-radius:12px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.08);
+}
+h2{margin-bottom:12px;}
+</style>
 </head>
-<body class="bg-slate-50 text-slate-900">
-  <div class="max-w-6xl mx-auto px-4 py-8">
-    <header class="flex items-start justify-between gap-4">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center font-bold text-emerald-700">RI</div>
-        <div>
-          <div class="text-xl font-semibold">Rekod Inovasi Jabatan</div>
-          <div class="text-sm text-slate-500">Log masuk guna akaun rasmi @pms.edu.my</div>
-        </div>
-      </div>
+<body>
 
-      <div id="userBox" class="hidden text-right">
-        <div class="text-sm font-medium" id="userEmail"></div>
-        <div class="text-xs text-slate-500">role: <span id="userRole"></span></div>
-        <button id="btnLogout" class="mt-2 px-3 py-2 rounded-lg border bg-white hover:bg-slate-50 text-sm">Logout</button>
-      </div>
-    </header>
-
-    <!-- LOGIN CARD -->
-    <section id="loginCard" class="mt-8 bg-white border rounded-2xl p-6 shadow-sm max-w-xl">
-      <div class="text-lg font-semibold">Login Google</div>
-      <div class="text-sm text-slate-600 mt-1">
-        Sistem akan semak email anda wujud dalam <b>StaffDirectory</b> (whitelist).
-      </div>
-
-      <div class="mt-5">
-        <div id="g_id_onload"></div>
-        <div id="g_id_signin" class="inline-block"></div>
-      </div>
-
-      <div id="loginMsg" class="mt-4 text-sm"></div>
-    </section>
-
-    <!-- APP -->
-    <section id="app" class="hidden mt-8">
-      <!-- DASHBOARD -->
-      <div class="bg-white border rounded-2xl p-6 shadow-sm">
-        <div class="flex items-center justify-between gap-3">
-          <div>
-            <div class="text-lg font-semibold">Dashboard (Tahun <span id="dashYear"></span>)</div>
-            <div class="text-sm text-slate-500">Kiraan ini dikira ikut pertandingan. Kalau inovasi bertanding 2 kali, kiraan akan naik 2.</div>
-          </div>
-          <div class="flex items-center gap-2">
-            <select id="dashYearSelect" class="px-3 py-2 rounded-lg border bg-white text-sm"></select>
-            <button id="btnDashRefresh" class="px-3 py-2 rounded-lg border bg-white hover:bg-slate-50 text-sm">Refresh</button>
-          </div>
-        </div>
-
-        <div class="grid md:grid-cols-4 gap-3 mt-4">
-          <div class="p-4 rounded-xl bg-slate-50 border">
-            <div class="text-xs text-slate-500">Inovasi dihasilkan</div>
-            <div class="text-2xl font-bold" id="statInnovations">0</div>
-          </div>
-          <div class="p-4 rounded-xl bg-slate-50 border">
-            <div class="text-xs text-slate-500">Penyertaan pertandingan</div>
-            <div class="text-2xl font-bold" id="statComps">0</div>
-          </div>
-          <div class="p-4 rounded-xl bg-slate-50 border">
-            <div class="text-xs text-slate-500">Gold</div>
-            <div class="text-2xl font-bold" id="statGold">0</div>
-          </div>
-          <div class="p-4 rounded-xl bg-slate-50 border">
-            <div class="text-xs text-slate-500">Silver / Bronze / Penyertaan</div>
-            <div class="text-sm mt-1">
-              <span class="font-semibold">Silver:</span> <span id="statSilver">0</span> ·
-              <span class="font-semibold">Bronze:</span> <span id="statBronze">0</span> ·
-              <span class="font-semibold">Penyertaan:</span> <span id="statPenyertaan">0</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-4">
-          <div class="text-sm font-semibold">Pecahan ikut peringkat (tahun semasa)</div>
-          <div id="statPeringkat" class="mt-2 flex flex-wrap gap-2"></div>
-        </div>
-      </div>
-
-      <!-- TOP BAR -->
-      <div class="mt-6 bg-white border rounded-2xl p-5 shadow-sm">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="text-sm text-slate-600">
-            Inovasi dipilih: <b id="selectedInnovationLabel">-</b>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <button id="btnPdfMine" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm">Cetak Laporan Saya (PDF)</button>
-            <button id="btnPdfSingle" class="px-3 py-2 rounded-lg border bg-white hover:bg-slate-50 text-sm">Cetak Inovasi Dipilih (PDF)</button>
-            <button id="btnPdfAll" class="hidden px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm">Admin: Cetak Semua (PDF)</button>
-          </div>
-        </div>
-        <div id="topMsg" class="mt-3 text-sm"></div>
-      </div>
-
-      <!-- TABS -->
-      <div class="mt-6 bg-white border rounded-2xl p-5 shadow-sm">
-        <div class="flex gap-2 flex-wrap">
-          <button class="tab px-4 py-2 rounded-xl border bg-white text-sm" data-tab="inovasi">Inovasi</button>
-          <button class="tab px-4 py-2 rounded-xl border bg-white text-sm" data-tab="team">Team</button>
-          <button class="tab px-4 py-2 rounded-xl border bg-white text-sm" data-tab="pertandingan">Pertandingan</button>
-          <button class="tab px-4 py-2 rounded-xl border bg-white text-sm" data-tab="profil">Profil</button>
-        </div>
-      </div>
-
-      <!-- PANELS -->
-      <div class="mt-4 space-y-4">
-        <!-- INOVASI -->
-        <section id="panel-inovasi" class="panel bg-white border rounded-2xl p-6 shadow-sm">
-          <div class="grid lg:grid-cols-2 gap-6">
-            <div>
-              <div class="text-lg font-semibold">Senarai Inovasi</div>
-              <div class="text-sm text-slate-500">Klik kad inovasi untuk pilih.</div>
-              <div id="inovasiList" class="mt-4 space-y-3"></div>
-            </div>
-
-            <div>
-              <div class="text-lg font-semibold">Tambah / Edit Inovasi</div>
-              <div class="text-sm text-slate-500">MYIPO status guna dropdown. Kalau “yes”, no. MYIPO wajib isi.</div>
-
-              <div class="mt-4 space-y-3">
-                <input id="invId" type="hidden"/>
-                <input id="invTajuk" class="w-full px-3 py-2 rounded-lg border" placeholder="Tajuk inovasi"/>
-                <input id="invTahun" class="w-full px-3 py-2 rounded-lg border" placeholder="Tahun (cth 2026)"/>
-
-                <input id="invKategori" class="w-full px-3 py-2 rounded-lg border" placeholder="Kategori (cth Produk / Proses)"/>
-                <input id="invStatus" class="w-full px-3 py-2 rounded-lg border" placeholder="Status (cth aktif / selesai)"/>
-
-                <div class="grid grid-cols-2 gap-3">
-                  <select id="invMyipoStatus" class="w-full px-3 py-2 rounded-lg border bg-white">
-                    <option value="no">MYIPO: no</option>
-                    <option value="yes">MYIPO: yes</option>
-                  </select>
-                  <input id="invMyipoNumber" class="w-full px-3 py-2 rounded-lg border" placeholder="MYIPO no."/>
-                </div>
-
-                <div class="flex gap-2">
-                  <button id="btnSaveInv" class="flex-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white">Simpan</button>
-                  <button id="btnClearInv" class="px-4 py-2 rounded-lg border bg-white hover:bg-slate-50">Clear</button>
-                </div>
-
-                <div id="invMsg" class="text-sm"></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- TEAM -->
-        <section id="panel-team" class="panel hidden bg-white border rounded-2xl p-6 shadow-sm">
-          <div class="grid lg:grid-cols-2 gap-6">
-            <div>
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="text-lg font-semibold">Team Members</div>
-                  <div class="text-sm text-slate-500">Ahli akan ikut inovasi yang dipilih.</div>
-                </div>
-                <button id="btnTeamRefresh" class="px-3 py-2 rounded-lg border bg-white hover:bg-slate-50 text-sm">Refresh</button>
-              </div>
-              <div id="teamList" class="mt-4 space-y-3"></div>
-            </div>
-
-            <div>
-              <div class="text-lg font-semibold">Tambah Team Member</div>
-              <div class="text-sm text-slate-500">Cari staf (2-3 huruf). Pilih suggestion → nama auto keluar. Kalau luar whitelist, isi manual.</div>
-
-              <div class="mt-4 space-y-3">
-                <input id="teamSearch" class="w-full px-3 py-2 rounded-lg border" placeholder="Cari staf (nama / email)..." list="staffDatalist"/>
-                <datalist id="staffDatalist"></datalist>
-
-                <input id="teamEmail" class="w-full px-3 py-2 rounded-lg border" placeholder="memberEmail@pms.edu.my"/>
-                <input id="teamName" class="w-full px-3 py-2 rounded-lg border" placeholder="Nama"/>
-                <input id="teamRole" class="w-full px-3 py-2 rounded-lg border" placeholder="Peranan (cth Ketua / Ahli)"/>
-
-                <button id="btnAddTeam" class="w-full px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white">Tambah Member</button>
-                <div id="teamMsg" class="text-sm"></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- PERTANDINGAN -->
-        <section id="panel-pertandingan" class="panel hidden bg-white border rounded-2xl p-6 shadow-sm">
-          <div class="grid lg:grid-cols-2 gap-6">
-            <div>
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="text-lg font-semibold">Senarai Pertandingan</div>
-                  <div class="text-sm text-slate-500">Berkaitan inovasi yang dipilih.</div>
-                </div>
-                <button id="btnCompRefresh" class="px-3 py-2 rounded-lg border bg-white hover:bg-slate-50 text-sm">Refresh</button>
-              </div>
-              <div id="compList" class="mt-4 space-y-3"></div>
-            </div>
-
-            <div>
-              <div class="text-lg font-semibold">Tambah Pertandingan</div>
-
-              <div class="mt-4 space-y-3">
-                <input id="compEvent" class="w-full px-3 py-2 rounded-lg border" placeholder="Nama event"/>
-                <input id="compYear" class="w-full px-3 py-2 rounded-lg border" placeholder="Tahun (cth 2026)"/>
-
-                <select id="compPeringkat" class="w-full px-3 py-2 rounded-lg border bg-white">
-                  <option value="">Peringkat (pilih)</option>
-                  <option>ANTARABANGSA</option>
-                  <option>KEBANGSAAN</option>
-                  <option>NEGERI</option>
-                  <option>DAERAH</option>
-                  <option>INSTITUSI</option>
-                  <option>LAIN-LAIN</option>
-                </select>
-
-                <select id="compPingat" class="w-full px-3 py-2 rounded-lg border bg-white">
-                  <option value="PENYERTAAN">PENYERTAAN</option>
-                  <option value="GOLD">GOLD</option>
-                  <option value="SILVER">SILVER</option>
-                  <option value="BRONZE">BRONZE</option>
-                </select>
-
-                <label class="flex items-center gap-2 text-sm">
-                  <input id="compAnugerah" type="checkbox" class="w-4 h-4"/>
-                  Menang anugerah khas
-                </label>
-
-                <input id="compAnugerahName" class="w-full px-3 py-2 rounded-lg border hidden" placeholder="Nama anugerah khas"/>
-
-                <button id="btnAddComp" class="w-full px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white">Simpan Pertandingan</button>
-                <div class="text-xs text-slate-500">
-                  Kalau tick “anugerah khas”, box nama anugerah akan muncul.
-                </div>
-                <div id="compMsg" class="text-sm"></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- PROFIL -->
-        <section id="panel-profil" class="panel hidden bg-white border rounded-2xl p-6 shadow-sm">
-          <div class="text-lg font-semibold">Profil</div>
-          <div class="mt-2 text-sm text-slate-600">
-            Email: <b id="profEmail"></b><br/>
-            Role: <b id="profRole"></b>
-          </div>
-          <div class="mt-4 text-sm text-slate-500">
-            Nota: Admin role boleh set dalam sheet <b>Users</b> (kolum role = <code>admin</code>).
-          </div>
-        </section>
-      </div>
-
-      <footer class="mt-10 text-center text-xs text-slate-400">
-        © <span id="yearNow"></span> kurakurahijau.com · v1
-      </footer>
-    </section>
+<div class="card">
+  <h2>Login Google</h2>
+  <div id="g_id_onload"
+       data-client_id="637964120539-4knkg8lrjdaludsn8gncjidse7bpl23m.apps.googleusercontent.com"
+       data-callback="handleCredentialResponse">
   </div>
 
-  <script src="./config.js"></script>
-  <script src="./app.js"></script>
+  <div class="g_id_signin"
+       data-type="standard"
+       data-size="large">
+  </div>
+</div>
+
+<script>
+
+const BASE_URL = "https://script.google.com/macros/s/AKfycbw5B9rmptyZuBJ7nIf1rHZBA7in4emEJF2Ubaep0pFDerua6APFXsoU_XdJpyhuy7KO/exec";
+
+function handleCredentialResponse(response){
+
+  const credential = response.credential;
+
+  fetch(`${BASE_URL}?action=loginGoogle&credential=${credential}`)
+  .then(r=>r.json())
+  .then(d=>{
+    if(!d.ok){
+      alert(d.error);
+      return;
+    }
+
+    localStorage.setItem("token", d.token);
+    location.reload();
+  })
+  .catch(e=>{
+    alert("Login error");
+    console.log(e);
+  });
+
+}
+
+</script>
+
 </body>
 </html>
