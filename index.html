@@ -6,8 +6,6 @@
   <title>Rekod Inovasi Jabatan</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <style>
@@ -19,7 +17,6 @@
 <body class="min-h-screen bg-slate-50 text-slate-900">
   <div class="max-w-5xl mx-auto px-4 py-8">
 
-    <!-- Header -->
     <div class="flex items-start justify-between gap-4">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center font-bold text-emerald-700">RI</div>
@@ -94,8 +91,13 @@
                   <input id="invTahun" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm" placeholder="Tahun (cth 2026)" />
                   <input id="invKategori" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm" placeholder="Kategori (cth Produk / Proses)" />
                   <input id="invStatus" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm" placeholder="Status (cth aktif / selesai)" />
+
                   <div class="grid grid-cols-2 gap-2">
-                    <input id="invMyipoStatus" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm" placeholder="MYIPO status (yes/no)" />
+                    <select id="invMyipoStatus" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm bg-white">
+                      <option value="">MYIPO status...</option>
+                      <option value="yes">yes</option>
+                      <option value="no">no</option>
+                    </select>
                     <input id="invMyipoNumber" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm" placeholder="MYIPO no." />
                   </div>
 
@@ -104,7 +106,7 @@
                   </button>
 
                   <div class="text-xs text-slate-500">
-                    Tip: Lepas simpan, klik kad inovasi untuk “select”.
+                    Tip: Lepas simpan, klik kad inovasi untuk “select”. Kalau typo, tekan Edit pada kad.
                   </div>
                 </div>
               </div>
@@ -124,7 +126,6 @@
                 <div class="text-base font-semibold">Tambah Team Member</div>
 
                 <div class="mt-3 space-y-3">
-                  <!-- Search + suggestion -->
                   <div>
                     <input id="staffSearch" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm"
                       placeholder="Cari staf (nama / email)... (taip 2-3 huruf)" list="staffSuggest" />
@@ -219,7 +220,47 @@
 
   </div>
 
-  <script src="./config.js?v=1"></script>
-  <script src="./app.js?v=1"></script>
+  <!-- Modal Edit Inovasi -->
+  <div id="editModal" class="hidden fixed inset-0 bg-black/40 items-center justify-center p-4">
+    <div class="w-full max-w-lg rounded-3xl bg-white border border-slate-100 shadow-lg p-5">
+      <div class="flex items-center justify-between">
+        <div class="text-lg font-semibold">Edit Inovasi</div>
+        <button id="btnCloseEdit" class="rounded-xl border border-slate-200 px-3 py-1 text-sm hover:bg-slate-50">Tutup</button>
+      </div>
+
+      <div class="mt-4 space-y-3">
+        <input id="editId" class="hidden" />
+        <input id="editTajuk" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm" placeholder="Tajuk inovasi" />
+        <input id="editTahun" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm" placeholder="Tahun (cth 2026)" />
+        <input id="editKategori" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm" placeholder="Kategori (cth Produk / Proses)" />
+        <input id="editStatus" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm" placeholder="Status (cth aktif / selesai)" />
+
+        <div class="grid grid-cols-2 gap-2">
+          <select id="editMyipoStatus" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm bg-white">
+            <option value="">MYIPO status...</option>
+            <option value="yes">yes</option>
+            <option value="no">no</option>
+          </select>
+          <input id="editMyipoNumber" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm" placeholder="MYIPO no." />
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 pt-2">
+          <button id="btnSaveEdit" class="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-semibold hover:bg-emerald-700">
+            Simpan Perubahan
+          </button>
+          <button id="btnDeleteInv" class="rounded-xl bg-rose-600 text-white px-4 py-2 text-sm font-semibold hover:bg-rose-700">
+            Delete Inovasi
+          </button>
+        </div>
+
+        <div class="text-xs text-slate-500">
+          Delete akan buang sekali rekod team & pertandingan bawah inovasi ni.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./config.js?v=2"></script>
+  <script src="./app.js?v=2"></script>
 </body>
 </html>
