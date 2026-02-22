@@ -8,7 +8,7 @@
     role: localStorage.getItem("ri_role") || "",
     selectedInnovationId: localStorage.getItem("ri_selectedInnovationId") || "",
     selectedInnovationTitle: localStorage.getItem("ri_selectedInnovationTitle") || "",
-    staffCache: new Map(), // email -> {email,name,jawatan}
+    staffCache: new Map(),
   };
 
   const ui = {
@@ -22,8 +22,8 @@
     selectedInnovationLabel: $("selectedInnovationLabel"),
     topMsg: $("topMsg"),
     yearNow: $("yearNow"),
+    yearNow2: $("yearNow2"),
 
-    // dashboard
     dashYear: $("dashYear"),
     dashYearSelect: $("dashYearSelect"),
     btnDashRefresh: $("btnDashRefresh"),
@@ -35,12 +35,10 @@
     statPenyertaan: $("statPenyertaan"),
     statPeringkat: $("statPeringkat"),
 
-    // pdf
     btnPdfMine: $("btnPdfMine"),
     btnPdfSingle: $("btnPdfSingle"),
     btnPdfAll: $("btnPdfAll"),
 
-    // inovasi
     inovasiList: $("inovasiList"),
     invId: $("invId"),
     invTajuk: $("invTajuk"),
@@ -53,7 +51,6 @@
     btnClearInv: $("btnClearInv"),
     invMsg: $("invMsg"),
 
-    // team
     teamList: $("teamList"),
     btnTeamRefresh: $("btnTeamRefresh"),
     teamSearch: $("teamSearch"),
@@ -64,7 +61,6 @@
     btnAddTeam: $("btnAddTeam"),
     teamMsg: $("teamMsg"),
 
-    // comps
     compList: $("compList"),
     btnCompRefresh: $("btnCompRefresh"),
     compEvent: $("compEvent"),
@@ -76,10 +72,23 @@
     btnAddComp: $("btnAddComp"),
     compMsg: $("compMsg"),
 
-    // profil
     profEmail: $("profEmail"),
     profRole: $("profRole"),
   };
+
+  // ---------------------------
+  // Safety check: config
+  // ---------------------------
+  function assertConfig() {
+    if (!CFG.API_BASE || !String(CFG.API_BASE).startsWith("https://script.google.com/macros/s/")) {
+      setMsg(ui.loginMsg, "CONFIG salah: API_BASE tak betul. Pastikan guna URL /exec.", false);
+      throw new Error("Bad API_BASE");
+    }
+    if (!CFG.GOOGLE_CLIENT_ID) {
+      setMsg(ui.loginMsg, "CONFIG salah: GOOGLE_CLIENT_ID kosong.", false);
+      throw new Error("Missing GOOGLE_CLIENT_ID");
+    }
+  }
 
   // ---------------------------
   // API helpers
@@ -100,7 +109,6 @@
 
   async function apiPost(action, params = {}, body = {}) {
     const url = apiUrl(action, params);
-    // NOTE: text/plain to avoid preflight in many cases
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -128,7 +136,6 @@
   // Auth / Google Sign-In
   // ---------------------------
   function setupGoogleButton() {
-    // Render via g_id_onload + g_id_signin
     const onload = $("g_id_onload");
     const signin = $("g_id_signin");
     if (!onload || !signin) return;
@@ -136,8 +143,10 @@
     onload.setAttribute("data-client_id", CFG.GOOGLE_CLIENT_ID);
     onload.setAttribute("data-callback", "onGoogleCredential");
     onload.setAttribute("data-auto_prompt", "false");
-    onload.setAttribute("data-hosted_domain", CFG.ALLOWED_DOMAIN || "");
+    if (CFG.ALLOWED_DOMAIN) onload.setAttribute("data-hosted_domain", CFG.ALLOWED_DOMAIN);
 
+    // Render button
+    signin.className = "g_id_signin";
     signin.setAttribute("data-type", "standard");
     signin.setAttribute("data-theme", "outline");
     signin.setAttribute("data-size", "large");
@@ -145,16 +154,20 @@
     signin.setAttribute("data-shape", "pill");
   }
 
-  // global callback for GIS
   window.onGoogleCredential = async (resp) => {
     try {
       setMsg(ui.loginMsg, "Signing in...");
       const credential = resp && resp.credential ? resp.credential : "";
+      if (!credential) {
+        setMsg(ui.loginMsg, "Google credential kosong. Cuba refresh page.", false);
+        return;
+      }
       const out = await apiGet("loginGoogle", { credential });
       if (!out.ok) {
         setMsg(ui.loginMsg, out.error || "Login failed", false);
         return;
       }
+
       state.token = out.token;
       state.email = out.email;
       state.role = out.role || "user";
@@ -165,7 +178,7 @@
 
       await bootApp();
     } catch (e) {
-      setMsg(ui.loginMsg, String(e), false);
+      setMsg(ui.loginMsg, String(e && e.message ? e.message : e), false);
     }
   };
 
@@ -175,8 +188,6 @@
     localStorage.removeItem("ri_role");
     localStorage.removeItem("ri_selectedInnovationId");
     localStorage.removeItem("ri_selectedInnovationTitle");
-    state.token = ""; state.email = ""; state.role = "";
-    state.selectedInnovationId = ""; state.selectedInnovationTitle = "";
     location.reload();
   }
 
@@ -213,10 +224,8 @@
     ui.dashYear.textContent = year;
 
     const out = await apiGet("dashboardStats", { token: state.token, year });
-    if (!out.ok) {
-      setMsg(ui.topMsg, out.error || "Dashboard error", false);
-      return;
-    }
+    if (!out.ok) return setMsg(ui.topMsg, out.error || "Dashboard error", false);
+
     const s = out.stats || {};
     ui.statInnovations.textContent = String(s.totalInnovations || 0);
     ui.statComps.textContent = String(s.totalCompetitions || 0);
@@ -237,7 +246,7 @@
     keys.forEach(k => {
       const pill = document.createElement("div");
       pill.className = "px-3 py-1 rounded-full border bg-slate-50 text-sm";
-      pill.innerHTML = `<b>${k}</b>: ${pc[k]}`;
+      pill.innerHTML = `<b>${escapeHtml(k)}</b>: ${pc[k]}`;
       ui.statPeringkat.appendChild(pill);
     });
   }
@@ -268,14 +277,10 @@
 
   async function loadInnovations() {
     const out = await apiGet("listMyInnovations", { token: state.token });
-    if (!out.ok) {
-      setMsg(ui.invMsg, out.error || "Gagal load inovasi", false);
-      return;
-    }
+    if (!out.ok) return setMsg(ui.invMsg, out.error || "Gagal load inovasi", false);
 
     const items = out.items || [];
     ui.inovasiList.innerHTML = "";
-
     if (!items.length) {
       ui.inovasiList.innerHTML = `<div class="text-sm text-slate-500">Belum ada inovasi. Tambah kat sebelah kanan.</div>`;
     }
@@ -322,21 +327,18 @@
       ui.inovasiList.appendChild(card);
     });
 
-    // refresh label
     ui.selectedInnovationLabel.textContent = state.selectedInnovationTitle || "-";
   }
 
   function selectInnovation(id, title) {
     state.selectedInnovationId = id;
     state.selectedInnovationTitle = title;
-
     localStorage.setItem("ri_selectedInnovationId", id);
     localStorage.setItem("ri_selectedInnovationTitle", title);
 
     ui.selectedInnovationLabel.textContent = title || "-";
     setMsg(ui.topMsg, "");
 
-    // auto refresh team & comps bila tukar inovasi
     loadTeam().catch(()=>{});
     loadCompetitions().catch(()=>{});
   }
@@ -352,19 +354,13 @@
       myipoNumber: ui.invMyipoNumber.value.trim()
     };
 
-    if (!p.tajuk) return setMsg(ui.invMsg, "Tajuk diperlukan.", false);
+    if (!p.tajuk) return setMsg(ui.invMsg, "Nama inovasi diperlukan.", false);
     if (!p.tahun) return setMsg(ui.invMsg, "Tahun diperlukan.", false);
-
-    if (p.myipoStatus === "yes" && !p.myipoNumber) {
-      return setMsg(ui.invMsg, "MYIPO status = yes, jadi MYIPO no. wajib isi.", false);
-    }
+    if (p.myipoStatus === "yes" && !p.myipoNumber) return setMsg(ui.invMsg, "MYIPO status = yes → No. MYIPO wajib isi.", false);
 
     let out;
-    if (id) {
-      out = await apiPost("updateInnovation", { token: state.token }, { innovationId: id, ...p });
-    } else {
-      out = await apiPost("addInnovation", { token: state.token }, p);
-    }
+    if (id) out = await apiPost("updateInnovation", { token: state.token }, { innovationId: id, ...p });
+    else out = await apiPost("addInnovation", { token: state.token }, p);
 
     if (!out.ok) return setMsg(ui.invMsg, out.error || "Gagal simpan", false);
 
@@ -381,10 +377,7 @@
     if (!requireInnovation()) return;
 
     const out = await apiGet("listTeam", { token: state.token, innovationId: state.selectedInnovationId });
-    if (!out.ok) {
-      setMsg(ui.teamMsg, out.error || "Gagal load team", false);
-      return;
-    }
+    if (!out.ok) return setMsg(ui.teamMsg, out.error || "Gagal load team", false);
 
     const items = out.items || [];
     ui.teamList.innerHTML = "";
@@ -406,8 +399,7 @@
         <button class="btnDel px-3 py-2 rounded-lg border bg-white hover:bg-slate-50 text-sm">Buang</button>
       `;
       card.querySelector(".btnDel").addEventListener("click", async () => {
-        const ok = confirm("Buang ahli ini?");
-        if (!ok) return;
+        if (!confirm("Buang ahli ini?")) return;
         const del = await apiPost("deleteTeam", { token: state.token }, { teamId: m.teamId, innovationId: state.selectedInnovationId });
         if (!del.ok) return setMsg(ui.teamMsg, del.error || "Gagal buang", false);
         setMsg(ui.teamMsg, "Ahli dibuang.");
@@ -427,10 +419,8 @@
     ui.staffDatalist.innerHTML = "";
     items.forEach(it => {
       const opt = document.createElement("option");
-      // pattern: "Nama <email>"
       opt.value = `${it.name} <${it.email}>`;
       ui.staffDatalist.appendChild(opt);
-      // cache
       state.staffCache.set(String(it.email||"").toLowerCase(), it);
     });
   }
@@ -438,7 +428,6 @@
   function parseEmailFromPick(text) {
     const m = String(text||"").match(/<([^>]+)>/);
     if (m && m[1]) return m[1].trim().toLowerCase();
-    // fallback: if user types email directly
     if (String(text||"").includes("@")) return String(text||"").trim().toLowerCase();
     return "";
   }
@@ -450,7 +439,6 @@
 
     ui.teamEmail.value = email;
 
-    // try cache first
     const cached = state.staffCache.get(email);
     if (cached && cached.name) {
       ui.teamName.value = cached.name;
@@ -458,14 +446,11 @@
       return;
     }
 
-    // lookup backend (kalau ada)
     const out = await apiGet("lookupStaff", { token: state.token, email });
     if (out.ok && out.found) {
       ui.teamName.value = out.name || "";
       setMsg(ui.teamMsg, "Nama auto diisi dari StaffDirectory.");
     } else {
-      // luar whitelist: biar user isi sendiri
-      ui.teamName.value = ui.teamName.value || "";
       setMsg(ui.teamMsg, "Staf luar whitelist. Isi nama manual.", false);
     }
   }
@@ -504,10 +489,7 @@
     if (!requireInnovation()) return;
 
     const out = await apiGet("listCompetitions", { token: state.token, innovationId: state.selectedInnovationId });
-    if (!out.ok) {
-      setMsg(ui.compMsg, out.error || "Gagal load pertandingan", false);
-      return;
-    }
+    if (!out.ok) return setMsg(ui.compMsg, out.error || "Gagal load pertandingan", false);
 
     const items = out.items || [];
     ui.compList.innerHTML = "";
@@ -529,8 +511,7 @@
         <button class="btnDel px-3 py-2 rounded-lg border bg-white hover:bg-slate-50 text-sm">Buang</button>
       `;
       card.querySelector(".btnDel").addEventListener("click", async () => {
-        const ok = confirm("Buang rekod pertandingan ini?");
-        if (!ok) return;
+        if (!confirm("Buang rekod pertandingan ini?")) return;
         const del = await apiPost("deleteCompetition", { token: state.token }, { compId: c.compId, innovationId: state.selectedInnovationId });
         if (!del.ok) return setMsg(ui.compMsg, del.error || "Gagal buang", false);
         setMsg(ui.compMsg, "Rekod dibuang.");
@@ -557,10 +538,7 @@
     if (!p.namaEvent) return setMsg(ui.compMsg, "Nama event diperlukan.", false);
     if (!p.tahun) return setMsg(ui.compMsg, "Tahun diperlukan.", false);
     if (!p.peringkat) return setMsg(ui.compMsg, "Peringkat diperlukan.", false);
-
-    if (p.anugerahKhas === "yes" && !p.namaAnugerahKhas) {
-      return setMsg(ui.compMsg, "Tick anugerah khas → isi nama anugerah.", false);
-    }
+    if (p.anugerahKhas === "yes" && !p.namaAnugerahKhas) return setMsg(ui.compMsg, "Tick anugerah khas → isi nama anugerah.", false);
 
     const out = await apiPost("addCompetition", { token: state.token }, p);
     if (!out.ok) return setMsg(ui.compMsg, out.error || "Gagal simpan", false);
@@ -579,10 +557,15 @@
   }
 
   // ---------------------------
-  // PDF
+  // PDF (ikut tahun dashboard select)
   // ---------------------------
+  function selectedYearForPdf() {
+    return ui.dashYearSelect ? ui.dashYearSelect.value : String(new Date().getFullYear());
+  }
+
   async function pdfMine() {
-    const out = await apiGet("generateReportPdfMine", { token: state.token });
+    const year = selectedYearForPdf();
+    const out = await apiGet("generateReportPdfMine", { token: state.token, year });
     if (!out.ok) return setMsg(ui.topMsg, out.error || "Gagal generate PDF", false);
     window.open(out.pdfUrl, "_blank");
     setMsg(ui.topMsg, "PDF siap dibuka di tab baru.");
@@ -590,14 +573,16 @@
 
   async function pdfSingle() {
     if (!requireInnovation()) return;
-    const out = await apiGet("generateReportPdf", { token: state.token, innovationId: state.selectedInnovationId });
+    const year = selectedYearForPdf();
+    const out = await apiGet("generateReportPdf", { token: state.token, innovationId: state.selectedInnovationId, year });
     if (!out.ok) return setMsg(ui.topMsg, out.error || "Gagal generate PDF", false);
     window.open(out.pdfUrl, "_blank");
     setMsg(ui.topMsg, "PDF inovasi dipilih siap dibuka di tab baru.");
   }
 
   async function pdfAll() {
-    const out = await apiGet("generateReportPdfAll", { token: state.token });
+    const year = selectedYearForPdf();
+    const out = await apiGet("generateReportPdfAll", { token: state.token, year });
     if (!out.ok) return setMsg(ui.topMsg, out.error || "Gagal generate PDF (admin)", false);
     window.open(out.pdfUrl, "_blank");
     setMsg(ui.topMsg, "PDF keseluruhan siap dibuka di tab baru.");
@@ -617,7 +602,6 @@
     ui.profRole.textContent = state.role;
 
     ui.selectedInnovationLabel.textContent = state.selectedInnovationTitle || "-";
-
     if (state.role === "admin") ui.btnPdfAll.classList.remove("hidden");
 
     await loadDashboard();
@@ -628,7 +612,7 @@
       await loadCompetitions();
     }
 
-    setTab("inovasi");
+    setTab("dashboard");
   }
 
   async function tryResume() {
@@ -636,7 +620,6 @@
 
     const out = await apiGet("me", { token: state.token });
     if (!out.ok) {
-      // token invalid, reset
       localStorage.removeItem("ri_token");
       return;
     }
@@ -700,11 +683,11 @@
     ui.dashYearSelect.addEventListener("change", loadDashboard);
   }
 
-  // ---------------------------
-  // init
-  // ---------------------------
   function init() {
-    ui.yearNow.textContent = String(new Date().getFullYear());
+    assertConfig();
+    const y = String(new Date().getFullYear());
+    if (ui.yearNow) ui.yearNow.textContent = y;
+
     initYearSelect();
     setupGoogleButton();
     bindMyipoToggle();
