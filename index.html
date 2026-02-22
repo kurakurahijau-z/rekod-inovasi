@@ -1,272 +1,332 @@
 <!doctype html>
-<html lang="ms" class="h-full">
+<html lang="ms">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Rekod Inovasi Jabatan</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-  <style>
-    * { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-  </style>
+  <!-- IMPORTANT: config dulu, baru app -->
+  <script src="./config.js"></script>
+  <script defer src="./app.js"></script>
 </head>
 
-<body class="min-h-screen bg-slate-50">
-  <div class="max-w-6xl mx-auto px-4 py-8">
-
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+<body class="bg-slate-50 min-h-screen">
+  <div class="max-w-6xl mx-auto px-5 py-10">
+    <div class="flex items-start justify-between gap-6">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center font-bold text-emerald-700">RI</div>
+        <div class="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center font-bold text-emerald-700">RI</div>
         <div>
-          <div class="text-xl font-bold">Rekod Inovasi Jabatan</div>
-          <div class="text-sm text-slate-500">Log masuk guna akaun rasmi <b>@pms.edu.my</b></div>
+          <div class="text-xl font-bold text-slate-900">Rekod Inovasi Jabatan</div>
+          <div class="text-sm text-slate-500">Log masuk guna akaun rasmi @pms.edu.my</div>
         </div>
       </div>
 
       <div id="userBox" class="hidden items-center gap-3">
         <div class="text-right">
-          <div id="userEmail" class="text-sm font-semibold text-slate-800">-</div>
-          <div class="text-xs text-slate-500">role: <span id="userRole">-</span></div>
+          <div class="text-sm font-semibold text-slate-900" id="userEmail">-</div>
+          <div class="text-xs text-slate-500">Role: <span id="userRole">-</span></div>
         </div>
-        <button id="btnLogout" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Logout</button>
+        <button id="btnLogout" class="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm hover:bg-slate-800">Logout</button>
       </div>
     </div>
 
-    <!-- Login Card -->
-    <div id="loginCard" class="max-w-xl mx-auto bg-white border rounded-2xl p-6 shadow-sm">
-      <div class="text-lg font-bold mb-2">Login Google</div>
-      <div class="text-sm text-slate-500 mb-4">
-        Sistem akan semak email anda wujud dalam <b>StaffDirectory (whitelist)</b>.
+    <div id="topMsg" class="mt-4 text-sm"></div>
+
+    <!-- LOGIN CARD -->
+    <div id="loginCard" class="mt-10 max-w-xl mx-auto bg-white border rounded-2xl p-6 shadow-sm">
+      <div class="text-lg font-bold">Login Google</div>
+      <div class="text-sm text-slate-500 mt-1">
+        Sistem akan semak email anda wujud dalam <b>StaffDirectory</b> (whitelist).
       </div>
 
-      <div id="g_id_onload"
-           data-client_id=""
-           data-callback="onGoogleCredential"
-           data-auto_prompt="false">
+      <div class="mt-5">
+        <!-- GIS mount -->
+        <div id="g_id_onload"></div>
+        <div id="g_id_signin"></div>
       </div>
 
-      <div id="g_id_signin" class="g_id_signin"
-           data-type="standard"
-           data-size="large">
-      </div>
-
-      <div id="loginMsg" class="mt-4 text-sm text-slate-600"></div>
+      <div id="loginMsg" class="mt-4 text-sm"></div>
     </div>
 
-    <!-- App -->
-    <div id="app" class="hidden">
-      <div class="bg-white border rounded-2xl p-5 shadow-sm">
-        <div class="flex items-center justify-between gap-4">
-          <div class="flex flex-wrap items-center gap-2">
-            <button class="tab px-4 py-2 rounded-xl border bg-slate-900 text-white text-sm" data-tab="inovasi">Inovasi</button>
-            <button class="tab px-4 py-2 rounded-xl border bg-white text-sm" data-tab="team">Team</button>
-            <button class="tab px-4 py-2 rounded-xl border bg-white text-sm" data-tab="pertandingan">Pertandingan</button>
-            <button class="tab px-4 py-2 rounded-xl border bg-white text-sm" data-tab="profil">Profil</button>
-          </div>
+    <!-- APP -->
+    <div id="app" class="hidden mt-10">
+      <!-- Quick info bar -->
+      <div class="bg-white border rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div class="text-sm text-slate-500">Inovasi dipilih</div>
+          <div class="text-lg font-bold" id="selectedInnovationLabel">-</div>
+        </div>
 
-          <div class="text-right">
-            <div class="text-sm text-slate-500">Inovasi dipilih: <b id="selectedInnovationLabel">-</b></div>
-            <div id="topMsg" class="text-sm mt-1"></div>
-          </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="btnPdfMine" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">
+            Cetak laporan saya (PDF)
+          </button>
+          <button id="btnPdfSingle" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">
+            Cetak inovasi dipilih (PDF)
+          </button>
+          <button id="btnPdfAll" class="hidden px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-sm">
+            Admin: Cetak keseluruhan (PDF)
+          </button>
         </div>
       </div>
 
-      <!-- Dashboard -->
-      <div class="mt-5 bg-white border rounded-2xl p-5 shadow-sm">
-        <div class="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <div class="text-lg font-bold">Dashboard</div>
-            <div class="text-sm text-slate-500">Ringkasan tahun <span id="dashYear">-</span> (kiraan ikut pertandingan; kalau inovasi bertanding 2 kali, kira 2).</div>
-          </div>
-          <div class="flex items-center gap-2">
-            <select id="dashYearSelect" class="px-3 py-2 rounded-xl border bg-white text-sm"></select>
-            <button id="btnDashRefresh" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Refresh</button>
-          </div>
-        </div>
-
-        <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div class="p-4 rounded-2xl border bg-slate-50">
-            <div class="text-sm text-slate-500">Bilangan inovasi dihasilkan</div>
-            <div id="statInnovations" class="text-2xl font-bold">0</div>
-          </div>
-          <div class="p-4 rounded-2xl border bg-slate-50">
-            <div class="text-sm text-slate-500">Bilangan pertandingan</div>
-            <div id="statComps" class="text-2xl font-bold">0</div>
-          </div>
-          <div class="p-4 rounded-2xl border bg-slate-50">
-            <div class="text-sm text-slate-500">Pingat (G/S/B/P)</div>
-            <div class="text-2xl font-bold">
-              <span id="statGold">0</span>/<span id="statSilver">0</span>/<span id="statBronze">0</span>/<span id="statPenyertaan">0</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-4">
-          <div class="text-sm font-semibold mb-2">Bilangan pertandingan mengikut peringkat</div>
-          <div id="statPeringkat" class="flex flex-wrap gap-2"></div>
-        </div>
+      <!-- Tabs -->
+      <div class="mt-6 flex flex-wrap gap-2">
+        <button class="tab px-4 py-2 rounded-xl border bg-white text-sm" data-tab="dashboard">Dashboard</button>
+        <button class="tab px-4 py-2 rounded-xl border bg-white text-sm" data-tab="inovasi">Inovasi</button>
+        <button class="tab px-4 py-2 rounded-xl border bg-white text-sm" data-tab="team">Ahli</button>
+        <button class="tab px-4 py-2 rounded-xl border bg-white text-sm" data-tab="comps">Pertandingan</button>
+        <button class="tab px-4 py-2 rounded-xl border bg-white text-sm" data-tab="profil">Profil</button>
       </div>
 
-      <!-- PDF -->
-      <div class="mt-5 bg-white border rounded-2xl p-5 shadow-sm">
-        <div class="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <div class="text-lg font-bold">Cetak Laporan (PDF)</div>
-            <div class="text-sm text-slate-500">
-              User: cetak inovasi sendiri + apa-apa yang berkait dengan nama dia. Admin: cetak keseluruhan.
-            </div>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <button id="btnPdfMine" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Cetak Saya (Semua)</button>
-            <button id="btnPdfSingle" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Cetak Inovasi Dipilih</button>
-            <button id="btnPdfAll" class="hidden px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Cetak Keseluruhan (Admin)</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Panels -->
+      <!-- PANELS -->
       <div class="mt-5">
 
-        <!-- INOVASI -->
-        <div id="panel-inovasi" class="panel">
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="bg-white border rounded-2xl p-5 shadow-sm">
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="text-lg font-bold">Senarai Inovasi</div>
-                  <div class="text-sm text-slate-500">Pilih satu inovasi untuk urus Team & Pertandingan.</div>
-                </div>
+        <!-- Dashboard -->
+        <div id="panel-dashboard" class="panel hidden">
+          <div class="bg-white border rounded-2xl p-6">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div class="text-lg font-bold">Dashboard</div>
+                <div class="text-sm text-slate-500">Ringkasan tahun <span id="dashYear">-</span></div>
               </div>
-              <div id="inovasiList" class="mt-4 space-y-3"></div>
+              <div class="flex items-center gap-2">
+                <select id="dashYearSelect" class="px-3 py-2 rounded-xl border bg-white text-sm"></select>
+                <button id="btnDashRefresh" class="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm hover:bg-slate-800">Refresh</button>
+              </div>
             </div>
 
-            <div class="bg-white border rounded-2xl p-5 shadow-sm">
-              <div class="text-lg font-bold">Tambah / Edit Inovasi</div>
-              <div class="grid grid-cols-1 gap-3 mt-4">
-                <input id="invId" type="hidden"/>
-                <input id="invTajuk" class="px-4 py-3 rounded-xl border" placeholder="Tajuk inovasi"/>
-                <input id="invTahun" class="px-4 py-3 rounded-xl border" placeholder="Tahun (cth 2026)"/>
-                <input id="invKategori" class="px-4 py-3 rounded-xl border" placeholder="Kategori (cth Produk / Proses)"/>
-                <input id="invStatus" class="px-4 py-3 rounded-xl border" placeholder="Status (cth aktif / selesai)"/>
+            <div class="grid md:grid-cols-5 gap-3 mt-5">
+              <div class="p-4 rounded-2xl border bg-slate-50">
+                <div class="text-xs text-slate-500">Jumlah inovasi (ikut tahun inovasi)</div>
+                <div class="text-2xl font-bold" id="statInnovations">0</div>
+              </div>
+              <div class="p-4 rounded-2xl border bg-slate-50">
+                <div class="text-xs text-slate-500">Jumlah pertandingan (ikut tahun pertandingan)</div>
+                <div class="text-2xl font-bold" id="statComps">0</div>
+              </div>
+              <div class="p-4 rounded-2xl border bg-slate-50">
+                <div class="text-xs text-slate-500">Gold</div>
+                <div class="text-2xl font-bold" id="statGold">0</div>
+              </div>
+              <div class="p-4 rounded-2xl border bg-slate-50">
+                <div class="text-xs text-slate-500">Silver</div>
+                <div class="text-2xl font-bold" id="statSilver">0</div>
+              </div>
+              <div class="p-4 rounded-2xl border bg-slate-50">
+                <div class="text-xs text-slate-500">Bronze</div>
+                <div class="text-2xl font-bold" id="statBronze">0</div>
+              </div>
+            </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <select id="invMyipoStatus" class="px-4 py-3 rounded-xl border bg-white">
-                    <option value="no">MYIPO status: no</option>
-                    <option value="yes">MYIPO status: yes</option>
-                  </select>
-                  <input id="invMyipoNumber" class="px-4 py-3 rounded-xl border" placeholder="MYIPO no."/>
-                </div>
-
-                <button id="btnSaveInv" class="px-4 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Simpan Inovasi</button>
-                <button id="btnClearInv" class="px-4 py-3 rounded-xl border bg-white hover:bg-slate-50">Clear</button>
-
-                <div id="invMsg" class="text-sm mt-2"></div>
+            <div class="grid md:grid-cols-2 gap-4 mt-5">
+              <div class="p-5 rounded-2xl border">
+                <div class="font-semibold">Penyertaan</div>
+                <div class="text-2xl font-bold mt-1" id="statPenyertaan">0</div>
+                <div class="text-xs text-slate-500 mt-1">Kiraan ikut rekod pertandingan.</div>
+              </div>
+              <div class="p-5 rounded-2xl border">
+                <div class="font-semibold">Pecahan peringkat</div>
+                <div class="mt-3 flex flex-wrap gap-2" id="statPeringkat"></div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- TEAM -->
+        <!-- Inovasi -->
+        <div id="panel-inovasi" class="panel hidden">
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="bg-white border rounded-2xl p-6">
+              <div class="text-lg font-bold">Senarai inovasi saya</div>
+              <div class="text-sm text-slate-500 mt-1">Owner atau ahli kumpulan.</div>
+              <div class="mt-4 space-y-3" id="inovasiList"></div>
+            </div>
+
+            <div class="bg-white border rounded-2xl p-6">
+              <div class="text-lg font-bold">Tambah / Kemaskini inovasi</div>
+
+              <input id="invId" type="hidden" />
+
+              <div class="mt-4 space-y-3">
+                <div>
+                  <div class="text-sm font-semibold">Nama inovasi</div>
+                  <input id="invTajuk" class="w-full px-3 py-2 rounded-xl border" placeholder="Contoh: Sistem Rekod Inovasi" />
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <div class="text-sm font-semibold">Tahun</div>
+                    <input id="invTahun" class="w-full px-3 py-2 rounded-xl border" placeholder="2026" />
+                  </div>
+                  <div>
+                    <div class="text-sm font-semibold">Kategori / Tema</div>
+                    <input id="invKategori" class="w-full px-3 py-2 rounded-xl border" placeholder="Contoh: Digital / TVET / Sustainability" />
+                  </div>
+                </div>
+                <div>
+                  <div class="text-sm font-semibold">Status</div>
+                  <input id="invStatus" class="w-full px-3 py-2 rounded-xl border" placeholder="Contoh: Aktif / Dalam proses / Tamat" />
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <div class="text-sm font-semibold">MYIPO (ada?)</div>
+                    <select id="invMyipoStatus" class="w-full px-3 py-2 rounded-xl border bg-white">
+                      <option value="no" selected>no</option>
+                      <option value="yes">yes</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div class="text-sm font-semibold">No. MYIPO</div>
+                    <input id="invMyipoNumber" class="w-full px-3 py-2 rounded-xl border" placeholder="Jika yes" />
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <button id="btnSaveInv" class="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-sm">Simpan</button>
+                  <button id="btnClearInv" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Clear</button>
+                </div>
+
+                <div id="invMsg" class="text-sm"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Team -->
         <div id="panel-team" class="panel hidden">
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="bg-white border rounded-2xl p-5 shadow-sm">
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="bg-white border rounded-2xl p-6">
               <div class="flex items-center justify-between">
                 <div>
-                  <div class="text-lg font-bold">Team Members</div>
-                  <div class="text-sm text-slate-500">Ahli akan ikut inovasi yang dipilih.</div>
+                  <div class="text-lg font-bold">Senarai ahli</div>
+                  <div class="text-sm text-slate-500">Untuk inovasi dipilih.</div>
                 </div>
                 <button id="btnTeamRefresh" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Refresh</button>
               </div>
-              <div id="teamList" class="mt-4 space-y-3"></div>
+              <div class="mt-4 space-y-3" id="teamList"></div>
             </div>
 
-            <div class="bg-white border rounded-2xl p-5 shadow-sm">
-              <div class="text-lg font-bold">Tambah Team Member</div>
+            <div class="bg-white border rounded-2xl p-6">
+              <div class="text-lg font-bold">Tambah ahli</div>
+              <div class="text-sm text-slate-500 mt-1">Boleh auto isi nama (jika ada dalam StaffDirectory).</div>
 
               <div class="mt-4 space-y-3">
-                <input id="teamSearch" list="staffDatalist" class="px-4 py-3 rounded-xl border w-full" placeholder="Taip 2-3 huruf, suggestion akan keluar."/>
-                <datalist id="staffDatalist"></datalist>
+                <div>
+                  <div class="text-sm font-semibold">Cari staf</div>
+                  <input id="teamSearch" class="w-full px-3 py-2 rounded-xl border" list="staffDatalist" placeholder="Taip nama atau email..." />
+                  <datalist id="staffDatalist"></datalist>
+                </div>
 
-                <input id="teamEmail" class="px-4 py-3 rounded-xl border w-full" placeholder="Email"/>
-                <input id="teamName" class="px-4 py-3 rounded-xl border w-full" placeholder="Nama"/>
-                <input id="teamRole" class="px-4 py-3 rounded-xl border w-full" placeholder="Peranan (cth Ketua / Ahli)"/>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <div class="text-sm font-semibold">Email</div>
+                    <input id="teamEmail" class="w-full px-3 py-2 rounded-xl border" placeholder="email@pms.edu.my" />
+                  </div>
+                  <div>
+                    <div class="text-sm font-semibold">Nama</div>
+                    <input id="teamName" class="w-full px-3 py-2 rounded-xl border" placeholder="Nama penuh" />
+                  </div>
+                </div>
 
-                <button id="btnAddTeam" class="w-full px-4 py-3 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800">Tambah Member</button>
+                <div>
+                  <div class="text-sm font-semibold">Peranan</div>
+                  <input id="teamRole" class="w-full px-3 py-2 rounded-xl border" placeholder="Contoh: Ketua / Ahli / Penyelia" />
+                </div>
+
+                <button id="btnAddTeam" class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-sm">Tambah ahli</button>
                 <div id="teamMsg" class="text-sm"></div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- PERTANDINGAN -->
-        <div id="panel-pertandingan" class="panel hidden">
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="bg-white border rounded-2xl p-5 shadow-sm">
+        <!-- Competitions -->
+        <div id="panel-comps" class="panel hidden">
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="bg-white border rounded-2xl p-6">
               <div class="flex items-center justify-between">
                 <div>
-                  <div class="text-lg font-bold">Rekod Pertandingan</div>
-                  <div class="text-sm text-slate-500">Kiraan pingat ikut bilangan pertandingan.</div>
+                  <div class="text-lg font-bold">Senarai pertandingan</div>
+                  <div class="text-sm text-slate-500">Untuk inovasi dipilih.</div>
                 </div>
                 <button id="btnCompRefresh" class="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50 text-sm">Refresh</button>
               </div>
-              <div id="compList" class="mt-4 space-y-3"></div>
+              <div class="mt-4 space-y-3" id="compList"></div>
             </div>
 
-            <div class="bg-white border rounded-2xl p-5 shadow-sm">
-              <div class="text-lg font-bold">Tambah Pertandingan</div>
+            <div class="bg-white border rounded-2xl p-6">
+              <div class="text-lg font-bold">Tambah pertandingan</div>
 
               <div class="mt-4 space-y-3">
-                <input id="compEvent" class="px-4 py-3 rounded-xl border w-full" placeholder="Nama event / pertandingan"/>
-                <input id="compYear" class="px-4 py-3 rounded-xl border w-full" placeholder="Tahun (cth 2026)"/>
-                <input id="compPeringkat" class="px-4 py-3 rounded-xl border w-full" placeholder="Peringkat (cth Antarabangsa / Kebangsaan / Negeri)"/>
+                <div>
+                  <div class="text-sm font-semibold">Nama event</div>
+                  <input id="compEvent" class="w-full px-3 py-2 rounded-xl border" placeholder="Contoh: iCOVEx 2026" />
+                </div>
 
-                <select id="compPingat" class="px-4 py-3 rounded-xl border bg-white w-full">
-                  <option value="PENYERTAAN">PENYERTAAN</option>
-                  <option value="GOLD">GOLD</option>
-                  <option value="SILVER">SILVER</option>
-                  <option value="BRONZE">BRONZE</option>
-                </select>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <div class="text-sm font-semibold">Tahun pertandingan</div>
+                    <input id="compYear" class="w-full px-3 py-2 rounded-xl border" placeholder="2026" />
+                  </div>
+                  <div>
+                    <div class="text-sm font-semibold">Peringkat</div>
+                    <input id="compPeringkat" class="w-full px-3 py-2 rounded-xl border" placeholder="ANTARABANGSA / KEBANGSAAN / NEGERI" />
+                  </div>
+                </div>
 
-                <label class="flex items-center gap-2 text-sm">
-                  <input id="compAnugerah" type="checkbox" class="w-4 h-4"/>
-                  Ada anugerah khas?
-                </label>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <div class="text-sm font-semibold">Pingat</div>
+                    <select id="compPingat" class="w-full px-3 py-2 rounded-xl border bg-white">
+                      <option>GOLD</option>
+                      <option>SILVER</option>
+                      <option>BRONZE</option>
+                      <option selected>PENYERTAAN</option>
+                    </select>
+                  </div>
+                  <div class="flex items-end gap-2">
+                    <label class="flex items-center gap-2 text-sm">
+                      <input type="checkbox" id="compAnugerah" />
+                      Anugerah khas
+                    </label>
+                  </div>
+                </div>
 
-                <input id="compAnugerahName" class="hidden px-4 py-3 rounded-xl border w-full" placeholder="Nama anugerah khas"/>
+                <div>
+                  <div class="text-sm font-semibold">Nama anugerah khas</div>
+                  <input id="compAnugerahName" class="w-full px-3 py-2 rounded-xl border hidden" placeholder="Contoh: Best Innovation" />
+                </div>
 
-                <button id="btnAddComp" class="w-full px-4 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Simpan Pertandingan</button>
+                <button id="btnAddComp" class="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-sm">Simpan pertandingan</button>
                 <div id="compMsg" class="text-sm"></div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- PROFIL -->
+        <!-- Profil -->
         <div id="panel-profil" class="panel hidden">
-          <div class="bg-white border rounded-2xl p-5 shadow-sm">
+          <div class="bg-white border rounded-2xl p-6">
             <div class="text-lg font-bold">Profil</div>
-            <div class="mt-3 text-sm text-slate-600">
-              <div>Email: <b id="profEmail">-</b></div>
-              <div>Role: <b id="profRole">-</b></div>
+            <div class="mt-4 text-sm">
+              <div><b>Email</b>: <span id="profEmail">-</span></div>
+              <div><b>Role</b>: <span id="profRole">-</span></div>
             </div>
+            <div class="mt-6 text-xs text-slate-400">© <span id="yearNow"></span> kurakurahijau.com</div>
           </div>
         </div>
 
       </div>
-
-      <!-- Footer -->
-      <div class="mt-10 text-center text-xs text-slate-400">
-        © <span id="yearNow"></span> kurakurahijau.com · v1
-      </div>
-
     </div>
+
+    <div class="mt-12 text-center text-xs text-slate-400">© <span id="yearNow2"></span> kurakurahijau.com</div>
   </div>
 
-  <!-- scripts -->
-  <script src="./config.js"></script>
-  <script src="./app.js"></script>
+  <script>
+    document.getElementById("yearNow2").textContent = String(new Date().getFullYear());
+  </script>
 </body>
 </html>
