@@ -68,20 +68,13 @@ function requireInnovation(){
   return true;
 }
 
-/**
- * API helper:
- * Untuk elak drama CORS/preflight, aku buat semua call guna GET.
- * Body akan dihantar sebagai query param 'payload' (JSON stringify).
- */
 async function api(action, body = null){
   const base = CFG.API_BASE;
   if(!base) throw new Error("API_BASE belum set dalam config.js");
 
   const url = new URL(base);
   url.searchParams.set("action", action);
-
   if(state.token) url.searchParams.set("token", state.token);
-
   if(body && typeof body === "object"){
     url.searchParams.set("payload", JSON.stringify(body));
   }
@@ -89,11 +82,11 @@ async function api(action, body = null){
   const res = await fetch(url.toString(), { method: "GET" });
   const txt = await res.text();
   let data = {};
-  try { data = JSON.parse(txt); } catch(e) { data = { ok:false, error:"Invalid JSON: "+txt.slice(0,120) }; }
+  try { data = JSON.parse(txt); }
+  catch(e) { data = { ok:false, error:"Invalid JSON: "+txt.slice(0,120) }; }
   return data;
 }
 
-/** Google Login button init (tunggu GIS ready) */
 function initGoogleButton(){
   const clientId = CFG.GOOGLE_CLIENT_ID;
   if (!clientId) {
@@ -143,7 +136,6 @@ function initGoogleButton(){
   mount();
 }
 
-/** UI tab switching */
 function activateTab(tabId){
   document.querySelectorAll(".tabPane").forEach(el => el.classList.add("hidden"));
   $(tabId).classList.remove("hidden");
@@ -166,6 +158,86 @@ function renderProfil(){
   $("profilRole").textContent = state.role || "-";
 }
 
+/** ===== EDIT MODAL ===== */
+function openEditModal(inv){
+  $("editId").value = inv.id || "";
+  $("editTajuk").value = inv.tajuk || "";
+  $("editTahun").value = inv.tahun || "";
+  $("editKategori").value = inv.kategori || "";
+  $("editStatus").value = inv.status || "";
+  $("editMyipoStatus").value = (inv.myipoStatus || "").toLowerCase();
+  $("editMyipoNumber").value = inv.myipoNumber || "";
+  $("editModal").classList.remove("hidden");
+  $("editModal").classList.add("flex");
+}
+
+function closeEditModal(){
+  $("editModal").classList.add("hidden");
+  $("editModal").classList.remove("flex");
+}
+
+$("btnCloseEdit")?.addEventListener("click", closeEditModal);
+$("editModal")?.addEventListener("click", (e)=>{
+  if(e.target && e.target.id === "editModal") closeEditModal();
+});
+
+$("btnSaveEdit")?.addEventListener("click", async ()=>{
+  try{
+    const id = $("editId").value.trim();
+    if(!id) throw new Error("Missing innovation id");
+
+    const payload = {
+      id,
+      tajuk: $("editTajuk").value.trim(),
+      tahun: $("editTahun").value.trim(),
+      kategori: $("editKategori").value.trim(),
+      status: $("editStatus").value.trim(),
+      myipoStatus: $("editMyipoStatus").value.trim(),
+      myipoNumber: $("editMyipoNumber").value.trim()
+    };
+
+    if(!payload.tajuk) throw new Error("Tajuk diperlukan");
+    if(!payload.tahun) throw new Error("Tahun diperlukan");
+
+    const out = await api("updateInnovation", payload);
+    if(!out.ok) throw new Error(out.error || "Gagal update inovasi");
+
+    // kalau inovasi yang sedang dipilih, update title kat header
+    if(state.selectedInnovationId === id){
+      setSelectedInnovation(id, payload.tajuk);
+    }
+
+    closeEditModal();
+    await renderInnovations();
+  }catch(e){
+    showMsg(e.message || String(e));
+  }
+});
+
+$("btnDeleteInv")?.addEventListener("click", async ()=>{
+  try{
+    const id = $("editId").value.trim();
+    if(!id) throw new Error("Missing innovation id");
+
+    const ok = confirm("Confirm delete inovasi ini? (Team & Pertandingan bawahnya akan ikut padam)");
+    if(!ok) return;
+
+    const out = await api("deleteInnovation", { id });
+    if(!out.ok) throw new Error(out.error || "Gagal delete inovasi");
+
+    // kalau delete inovasi yang sedang dipilih, reset selection
+    if(state.selectedInnovationId === id){
+      setSelectedInnovation("", "");
+    }
+
+    closeEditModal();
+    await renderInnovations();
+  }catch(e){
+    showMsg(e.message || String(e));
+  }
+});
+
+/** ===== INOVASI LIST ===== */
 async function renderInnovations(){
   const out = await api("listMyInnovations");
   if(!out.ok) { showMsg(out.error || "Gagal load inovasi"); return; }
@@ -181,20 +253,39 @@ async function renderInnovations(){
 
   items.forEach(it=>{
     const active = it.id === state.selectedInnovationId;
-    const card = document.createElement("button");
-    card.className = `w-full text-left rounded-2xl border px-4 py-3 hover:bg-slate-50 ${active ? "border-emerald-300 bg-emerald-50" : "border-slate-100 bg-white"}`;
-    card.innerHTML = `
-      <div class="font-semibold">${escapeHtml(it.tajuk || "(tiada tajuk)")}</div>
-      <div class="text-xs text-slate-500 mt-1">
-        Tahun: ${escapeHtml(it.tahun||"-")} • Kategori: ${escapeHtml(it.kategori||"-")} • Status: ${escapeHtml(it.status||"-")}
+
+    const wrap = document.createElement("div");
+    wrap.className = `rounded-2xl border px-4 py-3 ${active ? "border-emerald-300 bg-emerald-50" : "border-slate-100 bg-white"}`;
+
+    wrap.innerHTML = `
+      <div class="flex items-start justify-between gap-3">
+        <button class="text-left flex-1 hover:opacity-90">
+          <div class="font-semibold">${escapeHtml(it.tajuk || "(tiada tajuk)")}</div>
+          <div class="text-xs text-slate-500 mt-1">
+            Tahun: ${escapeHtml(it.tahun||"-")} • Kategori: ${escapeHtml(it.kategori||"-")} • Status: ${escapeHtml(it.status||"-")}
+          </div>
+          <div class="text-xs text-slate-500 mt-1">
+            MYIPO: ${escapeHtml((it.myipoStatus||"-").toString())} ${it.myipoNumber ? "• "+escapeHtml(it.myipoNumber) : ""}
+          </div>
+        </button>
+
+        <button class="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
+          Edit
+        </button>
       </div>
     `;
-    card.onclick = () => {
+
+    // click select
+    wrap.querySelector("button.text-left").onclick = () => {
       setSelectedInnovation(it.id, it.tajuk || "-");
       showMsg("");
       renderInnovations();
     };
-    list.appendChild(card);
+
+    // click edit
+    wrap.querySelectorAll("button")[1].onclick = () => openEditModal(it);
+
+    list.appendChild(wrap);
   });
 }
 
@@ -276,7 +367,7 @@ async function renderCompetitions(){
   });
 }
 
-/** Staff search suggestions (datalist) + autofill */
+/** Staff search suggestions + autofill */
 let staffTimer = null;
 $("staffSearch")?.addEventListener("input", () => {
   clearTimeout(staffTimer);
@@ -295,7 +386,6 @@ async function loadStaffSuggest(){
 
   (out.items || []).forEach(it=>{
     const opt = document.createElement("option");
-    // value = email, label = name
     opt.value = it.email || "";
     opt.label = it.name ? `${it.name}` : "";
     dl.appendChild(opt);
@@ -303,19 +393,14 @@ async function loadStaffSuggest(){
 }
 
 $("staffSearch")?.addEventListener("change", async () => {
-  // bila user pilih suggestion (biasanya dia jadi email)
   const val = ($("staffSearch").value || "").trim().toLowerCase();
   if(!val) return;
 
-  // cuba lookup
   const out = await api("lookupStaff", { email: val });
   if(out.ok && out.found){
     $("memberEmail").value = out.email || val;
     $("memberName").value = out.name || "";
-    // kosongkan search box supaya tak confuse
-    // $("staffSearch").value = "";
   }else{
-    // allow manual
     $("memberEmail").value = val;
     if(!$("memberName").value) $("memberName").value = "";
   }
@@ -328,7 +413,7 @@ $("btnAddInovasi")?.addEventListener("click", async () => {
     const tahun = $("invTahun").value.trim();
     const kategori = $("invKategori").value.trim();
     const status = $("invStatus").value.trim();
-    const myipoStatus = $("invMyipoStatus").value.trim();
+    const myipoStatus = $("invMyipoStatus").value.trim(); // select
     const myipoNumber = $("invMyipoNumber").value.trim();
 
     const out = await api("addInnovation", { tajuk, tahun, kategori, status, myipoStatus, myipoNumber });
@@ -399,7 +484,6 @@ $("btnAddComp")?.addEventListener("click", async () => {
     if(!tahun) throw new Error("Tahun diperlukan");
     if(!peringkat) throw new Error("Peringkat diperlukan");
     if(!pingat) throw new Error("Pingat diperlukan");
-
     if(anugerahKhas === "yes" && !namaAnugerahKhas){
       throw new Error("Nama anugerah khas diperlukan");
     }
@@ -430,7 +514,6 @@ $("btnAddComp")?.addEventListener("click", async () => {
   }
 });
 
-/** Boot after login */
 async function bootAfterLogin(){
   $("loginView").classList.add("hidden");
   $("appView").classList.remove("hidden");
@@ -444,7 +527,6 @@ async function bootAfterLogin(){
 
   $("selectedInnovationTitle").textContent = state.selectedInnovationTitle || "-";
 
-  // default tab
   activateTab("tabInovasi");
 }
 
@@ -466,7 +548,6 @@ document.querySelectorAll(".tabBtn").forEach(btn=>{
   btn.addEventListener("click", ()=> activateTab(btn.dataset.tab));
 });
 
-/** HTML escape */
 function escapeHtml(s){
   return String(s ?? "")
     .replaceAll("&","&amp;")
@@ -476,11 +557,9 @@ function escapeHtml(s){
     .replaceAll("'","&#039;");
 }
 
-/** Init */
 (async function init(){
   loadLocal();
 
-  // if already have token, verify quickly
   if(state.token){
     try{
       const me = await api("me");
@@ -492,12 +571,10 @@ function escapeHtml(s){
         return;
       }
     }catch(e){
-      // ignore -> fallback to login
       clearLocal();
     }
   }
 
-  // show login
   $("loginView").classList.remove("hidden");
   $("appView").classList.add("hidden");
   $("userBox").classList.add("hidden");
